@@ -1,3 +1,10 @@
+<a href="https://goreportcard.com/report/github.com/romshark/jscan-experimental-decoder">
+    <img src="https://goreportcard.com/badge/github.com/romshark/jscan-experimental-decoder" alt="GoReportCard">
+</a>
+<a href='https://coveralls.io/github/romshark/jscan-experimental-decoder/?branch=main'>
+    <img src='https://coveralls.io/repos/github/romshark/jscan-experimental-decoder/badge.svg?branch=main' alt='Coverage Status' />
+</a>
+
 # Experimental JSON decoder based on [jscan](github.com/romshark/jscan)
 
 ⚠️ Don't use in production! ⚠️
