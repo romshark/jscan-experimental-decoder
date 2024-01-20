@@ -355,6 +355,11 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 // to the source string instead since Go strings are guaranteed to be immutable.
 // When S is []byte all strings are copied.
 func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
+	defer func() {
+		for i := range d.stackExp {
+			d.stackExp[i].Dest = nil
+		}
+	}()
 	// for i, v := range d.stackExp {
 	// 	fmt.Printf("%d: %s (%d)\n", i, v.Type.String(), v.Size)
 	// } // TODO: remove DEBUG
