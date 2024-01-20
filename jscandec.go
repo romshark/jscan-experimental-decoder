@@ -790,9 +790,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				}
 				switch d.stackExp[si].Type {
 				case ExpectTypeStruct:
-					if d.stackExp[si].AdvanceBy > 0 {
-						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-					}
 				SCAN_KEYVALS:
 					for {
 						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
