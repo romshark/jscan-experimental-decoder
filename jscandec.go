@@ -186,8 +186,9 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 	case reflect.Array:
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame{
-			Size: t.Size() / t.Elem().Size(),
-			Type: ExpectTypeArray,
+			Size:             t.Size() / t.Elem().Size(),
+			Type:             ExpectTypeArray,
+			ParentFrameIndex: len(stack) - 1,
 		})
 		newAtIndex := len(stack)
 		stack = appendTypeToStack(stack, t.Elem())
@@ -198,8 +199,9 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 	case reflect.Slice:
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame{
-			Size: t.Size(),
-			Type: ExpectTypeSlice,
+			Size:             t.Size(),
+			Type:             ExpectTypeSlice,
+			ParentFrameIndex: len(stack) - 1,
 		})
 		newAtIndex := len(stack)
 		stack = appendTypeToStack(stack, t.Elem())
@@ -219,12 +221,14 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 
 		for i := 0; i < numFields; i++ {
 			f := t.Field(i)
+			name := f.Name
+			optionString := false
 			if jsonTag := f.Tag.Get("json"); jsonTag != "" {
-				name := jsonTag
-				var optionName string
+				name = jsonTag
 				if i := strings.IndexByte(jsonTag, ','); i != -1 {
 					name = jsonTag[:i]
-					optionName = jsonTag[i+1:]
+					optionName := jsonTag[i+1:]
+					optionString = optionName == "string"
 				}
 				switch name {
 				case "":
@@ -234,56 +238,112 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 					// Ignore this field.
 					continue
 				}
-
-				newAtIndex := len(stack)
-				stack = appendTypeToStack(stack, f.Type)
-				stack[parentIndex].Fields = append(
-					stack[parentIndex].Fields,
-					fieldStackFrame{
-						Name:       name,
-						FrameIndex: newAtIndex,
-					},
-				)
-
-				// Assign static offset
-				stack[newAtIndex].Offset = f.Offset
-
-				// Link the field frame to the parent struct frame.
-				stack[newAtIndex].ParentFrameIndex = parentIndex
-
-				// Set `string` option if defined.
-				stack[newAtIndex].OptionString = optionName == "string"
 			}
+
+			newAtIndex := len(stack)
+			stack = appendTypeToStack(stack, f.Type)
+			stack[parentIndex].Fields = append(
+				stack[parentIndex].Fields,
+				fieldStackFrame{
+					Name:       name,
+					FrameIndex: newAtIndex,
+				},
+			)
+
+			// Assign static offset
+			stack[newAtIndex].Offset = f.Offset
+
+			// Link the field frame to the parent struct frame.
+			stack[newAtIndex].ParentFrameIndex = parentIndex
+
+			// Set `string` option if defined.
+			stack[newAtIndex].OptionString = optionString
 		}
 
 	case reflect.Bool:
-		stack = append(stack, stackFrame{Type: ExpectTypeBool, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeBool,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.String:
-		stack = append(stack, stackFrame{Type: ExpectTypeStr, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeStr,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Int:
-		stack = append(stack, stackFrame{Type: ExpectTypeInt, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeInt,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Int8:
-		stack = append(stack, stackFrame{Type: ExpectTypeInt8, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeInt8,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Int16:
-		stack = append(stack, stackFrame{Type: ExpectTypeInt16, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeInt16,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Int32:
-		stack = append(stack, stackFrame{Type: ExpectTypeInt32, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeInt32,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Int64:
-		stack = append(stack, stackFrame{Type: ExpectTypeInt64, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeInt64,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Uint:
-		stack = append(stack, stackFrame{Type: ExpectTypeUint, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeUint,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Uint8:
-		stack = append(stack, stackFrame{Type: ExpectTypeUint8, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeUint8,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Uint16:
-		stack = append(stack, stackFrame{Type: ExpectTypeUint16, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeUint16,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Uint32:
-		stack = append(stack, stackFrame{Type: ExpectTypeUint32, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeUint32,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Uint64:
-		stack = append(stack, stackFrame{Type: ExpectTypeUint64, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeUint64,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Float32:
-		stack = append(stack, stackFrame{Type: ExpectTypeFloat32, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeFloat32,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Float64:
-		stack = append(stack, stackFrame{Type: ExpectTypeFloat64, Size: t.Size()})
+		stack = append(stack, stackFrame{
+			Type:             ExpectTypeFloat64,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	default:
 		panic(fmt.Errorf("TODO: unsupported type: %v", t))
 	}
