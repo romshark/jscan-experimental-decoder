@@ -94,9 +94,8 @@ func TestDecodeNil(t *testing.T) {
 	tokenizer := jscan.NewTokenizer[string](64, 1024)
 	d := jscandec.NewDecoder[string, [][]bool](tokenizer)
 	err := d.Decode(`"foo"`, nil)
-	if err.IsErr() {
-		t.Fatal(err.Error())
-	}
+	require.True(t, err.IsErr())
+	require.Equal(t, jscandec.ErrNilDest, err.Err)
 }
 
 func TestDecodeBool(t *testing.T) {

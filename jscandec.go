@@ -14,6 +14,7 @@ import (
 )
 
 var (
+	ErrNilDest         = errors.New("decoding to nil pointer")
 	ErrUnexpectedValue = errors.New("unexpected value")
 	ErrIntegerOverflow = errors.New("integer overflow")
 )
@@ -365,7 +366,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 	// } // TODO: remove DEBUG
 
 	if t == nil {
-		return ErrorDecode{}
+		return ErrorDecode{Err: ErrNilDest}
 	}
 
 	var fnA2I func(s S, dest unsafe.Pointer) error
