@@ -145,14 +145,14 @@ type stackFrame struct {
 // performance by avoiding dynamic decoder and tokenizer allocation and reflection at
 // runtime create a reusable decoder instance using NewDecoder.
 func Unmarshal[S []byte | string, T any](s S, t *T) error {
+	if t == nil {
+		return ErrNilDest
+	}
 	stack := make([]stackFrame, 0, 4)
 	stack = appendTypeToStack(stack, reflect.TypeOf(*t))
 	tokenizer := jscan.NewTokenizer[S](
 		len(stack)+1, len(s)/2,
 	)
-	if t == nil {
-		return ErrNilDest
-	}
 	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
 	if err := d.Decode(s, t); err.IsErr() {
 		return err.Err
