@@ -830,8 +830,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
-
-			case jscan.TokenTypeArrayEnd, jscan.TokenTypeObjectEnd:
+			case jscan.TokenTypeObjectEnd:
+				// Go up the stack if current frame is a field
+				if pi := d.stackExp[si].ParentFrameIndex; pi != -1 &&
+					d.stackExp[pi].Fields != nil {
+					si = d.stackExp[si].ParentFrameIndex
+				}
+			case jscan.TokenTypeArrayEnd:
 				si = d.stackExp[si].ParentFrameIndex
 			}
 			// fmt.Printf("T%d: %s at %d\n", ti, tokens[ti].Type.String(), tokens[ti].Index)
