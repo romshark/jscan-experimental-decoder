@@ -563,6 +563,71 @@ func TestDecodeStruct(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeStructSlice(t *testing.T) {
+	type S struct {
+		Foo int    `json:"foo"`
+		Bar string `json:"bar"`
+	}
+	s := newTestSetup[[]S]()
+	s.testOK(t, "empty_array",
+		`[]`, []S{})
+	s.testOK(t, "regular_field_order",
+		`[{"foo":42,"bar":"bazz"}]`, []S{{Foo: 42, Bar: "bazz"}})
+	s.testOK(t, "multiple",
+		`[
+			{"foo": 1, "bar": "a"},
+			{"foo": 2, "bar": "ab"},
+			{"foo": 3, "bar": "abc"},
+			{"foo": 4, "bar": "abcd"},
+			{"foo": 5, "bar": "abcde"},
+			{"foo": 6, "bar": "abcdef"},
+			{"foo": 7, "bar": "abcdefg"}
+		]`, []S{
+			{Foo: 1, Bar: "a"},
+			{Foo: 2, Bar: "ab"},
+			{Foo: 3, Bar: "abc"},
+			{Foo: 4, Bar: "abcd"},
+			{Foo: 5, Bar: "abcde"},
+			{Foo: 6, Bar: "abcdef"},
+			{Foo: 7, Bar: "abcdefg"},
+		})
+	s.testOK(t, "empty_null_and_unknown_fields",
+		`[
+			{ },
+			null,
+			{"faz":42,"baz":"bazz"}
+		]`, []S{{}, {}, {}})
+	s.testOK(t, "mixed",
+		`[
+			{"bar":"abc","foo":1234},
+			{"FOO":42,"BAR":"bazz"},
+			{"Foo":42,"Bar":"bazz"},
+			{"foo":null,"bar":null},
+			{"bar":"bar"},
+			{"foo":12345},
+			{"bar":"bar","unknown":42,"foo":102},
+			{"unknown":42, "unknown2": "bad"},
+			{},
+			{"faz":42,"baz":"bazz"}
+		]`, []S{
+			{Foo: 1234, Bar: "abc"},
+			{Foo: 42, Bar: "bazz"},
+			{Foo: 42, Bar: "bazz"},
+			{Foo: 0, Bar: ""},
+			{Bar: "bar"},
+			{Foo: 12345},
+			{Foo: 102, Bar: "bar"},
+			{},
+			{},
+			{},
+		})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func BenchmarkSmall(b *testing.B) {
 	in := []byte(`[[true],[false,false,false,false],[],[],[true]]`) // 18 tokens
 
