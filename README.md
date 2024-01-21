@@ -10,7 +10,7 @@
 ⚠️ Don't use in production! ⚠️
 
 This is an experimental JSON Unmarshaler/Decoder implementation for Go based on
-[jscan](github.com/romshark/jscan). This decoder will be moved to jscan v3 once it's
+[jscan](https://github.com/romshark/jscan). This decoder will be moved to jscan v3 once it's
 ready for production.
 
 The jscan decoder is expected to be a backward compatible drop-in replacement for [encoding/json](https://pkg.go.dev/encoding/json).
