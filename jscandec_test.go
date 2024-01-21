@@ -480,7 +480,7 @@ func TestDecodeString(t *testing.T) {
 	s.testOK(t, "unicede", `"юникодж"`, "юникодж")
 }
 
-func TestDecode2DArrayBool(t *testing.T) {
+func TestDecode2DSliceBool(t *testing.T) {
 	type T = [][]bool
 	s := newTestSetup[T]()
 	s.testOK(t, "3_2", `[[true],[false, true],[ ]]`, T{{true}, {false, true}, {}})
@@ -490,7 +490,7 @@ func TestDecode2DArrayBool(t *testing.T) {
 	s.testOK(t, "array_2d_bool_6m", array2DBool6M)
 }
 
-func TestDecodeArrayString(t *testing.T) {
+func TestDecodeSliceString(t *testing.T) {
 	type T = []string
 	s := newTestSetup[T]()
 	s.testOK(t, "3", `[ "a", "ab", "cde" ]`, T{"a", "ab", "cde"})
@@ -499,7 +499,7 @@ func TestDecodeArrayString(t *testing.T) {
 	s.testOK(t, "array_str_1024_639k", arrayStr1024)
 }
 
-func TestDecodeArrayFloat32(t *testing.T) {
+func TestDecodeSliceFloat32(t *testing.T) {
 	type T = []float32
 	s := newTestSetup[T]()
 	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
@@ -508,7 +508,7 @@ func TestDecodeArrayFloat32(t *testing.T) {
 	s.testOK(t, "array_dec_1024_10k", arrayFloat1024)
 }
 
-func TestDecodeArrayFloat64(t *testing.T) {
+func TestDecodeSliceFloat64(t *testing.T) {
 	type T = []float64
 	s := newTestSetup[T]()
 	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
@@ -518,13 +518,50 @@ func TestDecodeArrayFloat64(t *testing.T) {
 	s.testOK(t, "array_dec_1024_10k", arrayFloat1024)
 }
 
-func TestDecode2DArrayInt(t *testing.T) {
+func TestDecode2DSliceInt(t *testing.T) {
 	type T = [][]int
 	s := newTestSetup[T]()
 	s.testOK(t, "3_2", `[[0],[12, 123],[ ]]`, T{{0}, {12, 123}, {}})
 	s.testOK(t, "2_1", `[[],[-12345678]]`, T{{}, {-12_345_678}})
 	s.testOK(t, "2_0", `[[],[]]`, T{{}, {}})
 	s.testOK(t, "1", `[]`, T{})
+}
+
+func TestDecodeMatrix2Int(t *testing.T) {
+	type T = [2][2]int
+	s := newTestSetup[T]()
+	s.testOK(t, "complete",
+		`[[0,1],[2,3]]`,
+		T{{0, 1}, {2, 3}})
+	s.testOK(t, "empty",
+		`[]`,
+		T{{0, 0}, {0, 0}})
+	s.testOK(t, "sub_arrays_empty",
+		`[[],[]]`,
+		T{{0, 0}, {0, 0}})
+	s.testOK(t, "incomplete",
+		`[[1],[2]]`,
+		T{{1, 0}, {2, 0}})
+	s.testOK(t, "partially_incomplete",
+		`[[1,2],[3]]`,
+		T{{1, 2}, {3, 0}})
+}
+
+func TestDecodeMatrix4Int(t *testing.T) {
+	type T = [4][4]int
+	s := newTestSetup[T]()
+	s.testOK(t, "complete",
+		`[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]`,
+		T{{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}})
+	s.testOK(t, "incomplete",
+		`[[1],[2,3],[4,5,6],[]]`,
+		T{{1, 0, 0, 0}, {2, 3, 0, 0}, {4, 5, 6, 0}, {0, 0, 0, 0}})
+	s.testOK(t, "empty",
+		`[]`,
+		T{{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}})
+	s.testOK(t, "sub_arrays_empty_incomplete",
+		`[[],[]]`,
+		T{{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}})
 }
 
 func TestDecodeStruct(t *testing.T) {

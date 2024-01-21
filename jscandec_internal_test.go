@@ -192,6 +192,21 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: [4]int{},
+			ExpectStack: []stackFrame{
+				{
+					Size:             reflect.TypeOf([4]int{}).Size(),
+					Type:             ExpectTypeArray,
+					ParentFrameIndex: -1,
+				},
+				{
+					Size:             reflect.TypeOf(int(0)).Size(),
+					Type:             ExpectTypeInt,
+					ParentFrameIndex: 0,
+				},
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
 			actual := appendTypeToStack(nil, reflect.TypeOf(td.Input))

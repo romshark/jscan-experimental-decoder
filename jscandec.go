@@ -186,7 +186,7 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 	case reflect.Array:
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame{
-			Size:             t.Size() / t.Elem().Size(),
+			Size:             t.Size(),
 			Type:             ExpectTypeArray,
 			ParentFrameIndex: len(stack) - 1,
 		})
@@ -696,6 +696,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				switch d.stackExp[si].Type {
 				case ExpectTypeArray:
 					if tokens[ti].Elements < 1 {
+						ti++ // Skip over closing TokenArrayEnd
 						// Empty array, no need to allocate memory.
 						// Go will automatically allocate it together with its parent
 						// and zero it.
@@ -719,17 +720,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
 					}
 
-					var dp unsafe.Pointer
-					if elems := uintptr(tokens[ti].Elements); elems == 0 {
-						// Allocate empty slice
-						dp = allocate(elementSize)
-						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: 0, Cap: 0}
-					} else {
-						dp = allocate(elems * elementSize)
-						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: elems, Cap: elems}
-					}
 					si++
-					d.stackExp[si].Dest = dp
+					d.stackExp[si].Dest = p
 					d.stackExp[si].Offset = 0
 					d.stackExp[si].AdvanceBy = elementSize
 
@@ -792,6 +784,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				if tokens[ti-1].Type != jscan.TokenTypeObject {
 					// Exit previous key first
 					si = d.stackExp[si].ParentFrameIndex
+					if si < 0 {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
 				}
 				switch d.stackExp[si].Type {
 				case ExpectTypeStruct:
@@ -820,6 +819,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 							}
 						}
 						si = frameIndex
+						if si < 0 {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
 						break
 					}
 
@@ -835,9 +841,23 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				if pi := d.stackExp[si].ParentFrameIndex; pi != -1 &&
 					d.stackExp[pi].Fields != nil {
 					si = d.stackExp[si].ParentFrameIndex
+					if si < 0 {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
 				}
 			case jscan.TokenTypeArrayEnd:
 				si = d.stackExp[si].ParentFrameIndex
+				if si < 0 {
+					err = ErrorDecode{
+						Err:   ErrUnexpectedValue,
+						Index: tokens[ti].Index,
+					}
+					return true
+				}
 			}
 			// fmt.Printf("T%d: %s at %d\n", ti, tokens[ti].Type.String(), tokens[ti].Index)
 			// fmt.Printf("expect: %#v\n", d.stackExpect[si].Type.String())
