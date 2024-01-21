@@ -174,10 +174,6 @@ func NewDecoder[S []byte | string, T any](tokenizer *jscan.Tokenizer[S]) *Decode
 	var z T
 	d.stackExp = appendTypeToStack(d.stackExp, reflect.TypeOf(z))
 
-	// Add termination level which avoids out of bound access
-	// when an unexpected value is read.
-	d.stackExp = append(d.stackExp, stackFrame{})
-
 	return d
 }
 
