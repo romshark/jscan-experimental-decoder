@@ -148,8 +148,13 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 	tokenizer := jscan.NewTokenizer[S](
 		jscan.DefaultStackSizeTokenizer, len(s)/2,
 	)
-	decoder := NewDecoder[S, T](tokenizer)
-	if err := decoder.Decode(s, t); err.IsErr() {
+	if t == nil {
+		return ErrNilDest
+	}
+	stack := make([]stackFrame, 0, 4)
+	stack = appendTypeToStack(stack, reflect.TypeOf(*t))
+	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
+	if err := d.Decode(s, t); err.IsErr() {
 		return err.Err
 	}
 	return nil
