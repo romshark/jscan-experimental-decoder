@@ -886,8 +886,7 @@ func writeNullValue(t ExpectType, p unsafe.Pointer) {
 	case ExpectTypeSlice:
 		// Skip
 	case ExpectTypeStruct:
-		// TODO:
-		panic("TODO")
+		// Nothing, the struct is already zeroed
 	case ExpectTypeBool:
 		*(*bool)(p) = zeroBool
 	case ExpectTypeStr:
