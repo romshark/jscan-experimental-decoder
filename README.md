@@ -21,9 +21,10 @@ Roadmap:
 - [x] Slices
 - [x] Arrays
 - [ ] JSON struct tags
-    - [x] support for field names with case-insensitive matching.
-    - [ ] option `string`
+    - [x] Case-insensitive key matching.
+    - [ ] Option `string`
 - [ ] Pointers
-- [ ] `any`
-- [ ] `map`
-- [ ] `json.RawMessage`
+- [ ] Type `any`
+- [ ] Type `map`
+- [ ] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
+- [ ] Type `json.RawMessage`
