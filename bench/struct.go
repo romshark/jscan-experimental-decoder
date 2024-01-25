@@ -10,3 +10,13 @@ type BoolMatrix struct {
 type IntArray struct {
 	Data []int `json:"data"`
 }
+
+type MapStringString struct {
+	Data map[string]string `json:"data"`
+}
+
+type Struct3 struct {
+	Name   string   `json:"name"`
+	Number int      `json:"number"`
+	Tags   []string `json:"tags"`
+}

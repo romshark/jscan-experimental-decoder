@@ -500,7 +500,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 	si := 0
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
-	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token) (exit bool) {
+	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		for ti := 0; ti < len(tokens); ti++ {
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:

@@ -17,7 +17,215 @@ var (
 	_ easyjson.Marshaler
 )
 
-func easyjson9f2eff5fDecodeJscancodecBench(in *jlexer.Lexer, out *IntArray) {
+func easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench(in *jlexer.Lexer, out *Struct3) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "name":
+			out.Name = string(in.String())
+		case "number":
+			out.Number = int(in.Int())
+		case "tags":
+			if in.IsNull() {
+				in.Skip()
+				out.Tags = nil
+			} else {
+				in.Delim('[')
+				if out.Tags == nil {
+					if !in.IsDelim(']') {
+						out.Tags = make([]string, 0, 4)
+					} else {
+						out.Tags = []string{}
+					}
+				} else {
+					out.Tags = (out.Tags)[:0]
+				}
+				for !in.IsDelim(']') {
+					var v1 string
+					v1 = string(in.String())
+					out.Tags = append(out.Tags, v1)
+					in.WantComma()
+				}
+				in.Delim(']')
+			}
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench(out *jwriter.Writer, in Struct3) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"name\":"
+		out.RawString(prefix[1:])
+		out.String(string(in.Name))
+	}
+	{
+		const prefix string = ",\"number\":"
+		out.RawString(prefix)
+		out.Int(int(in.Number))
+	}
+	{
+		const prefix string = ",\"tags\":"
+		out.RawString(prefix)
+		if in.Tags == nil && (out.Flags&jwriter.NilSliceAsEmpty) == 0 {
+			out.RawString("null")
+		} else {
+			out.RawByte('[')
+			for v2, v3 := range in.Tags {
+				if v2 > 0 {
+					out.RawByte(',')
+				}
+				out.String(string(v3))
+			}
+			out.RawByte(']')
+		}
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v Struct3) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v Struct3) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *Struct3) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *Struct3) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench(l, v)
+}
+func easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench1(in *jlexer.Lexer, out *MapStringString) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "data":
+			if in.IsNull() {
+				in.Skip()
+			} else {
+				in.Delim('{')
+				out.Data = make(map[string]string)
+				for !in.IsDelim('}') {
+					key := string(in.String())
+					in.WantColon()
+					var v4 string
+					v4 = string(in.String())
+					(out.Data)[key] = v4
+					in.WantComma()
+				}
+				in.Delim('}')
+			}
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench1(out *jwriter.Writer, in MapStringString) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"data\":"
+		out.RawString(prefix[1:])
+		if in.Data == nil && (out.Flags&jwriter.NilMapAsEmpty) == 0 {
+			out.RawString(`null`)
+		} else {
+			out.RawByte('{')
+			v5First := true
+			for v5Name, v5Value := range in.Data {
+				if v5First {
+					v5First = false
+				} else {
+					out.RawByte(',')
+				}
+				out.String(string(v5Name))
+				out.RawByte(':')
+				out.String(string(v5Value))
+			}
+			out.RawByte('}')
+		}
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v MapStringString) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench1(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v MapStringString) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench1(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *MapStringString) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench1(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *MapStringString) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench1(l, v)
+}
+func easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench2(in *jlexer.Lexer, out *IntArray) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -52,9 +260,9 @@ func easyjson9f2eff5fDecodeJscancodecBench(in *jlexer.Lexer, out *IntArray) {
 					out.Data = (out.Data)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v1 int
-					v1 = int(in.Int())
-					out.Data = append(out.Data, v1)
+					var v6 int
+					v6 = int(in.Int())
+					out.Data = append(out.Data, v6)
 					in.WantComma()
 				}
 				in.Delim(']')
@@ -69,7 +277,7 @@ func easyjson9f2eff5fDecodeJscancodecBench(in *jlexer.Lexer, out *IntArray) {
 		in.Consumed()
 	}
 }
-func easyjson9f2eff5fEncodeJscancodecBench(out *jwriter.Writer, in IntArray) {
+func easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench2(out *jwriter.Writer, in IntArray) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -80,11 +288,11 @@ func easyjson9f2eff5fEncodeJscancodecBench(out *jwriter.Writer, in IntArray) {
 			out.RawString("null")
 		} else {
 			out.RawByte('[')
-			for v2, v3 := range in.Data {
-				if v2 > 0 {
+			for v7, v8 := range in.Data {
+				if v7 > 0 {
 					out.RawByte(',')
 				}
-				out.Int(int(v3))
+				out.Int(int(v8))
 			}
 			out.RawByte(']')
 		}
@@ -95,27 +303,27 @@ func easyjson9f2eff5fEncodeJscancodecBench(out *jwriter.Writer, in IntArray) {
 // MarshalJSON supports json.Marshaler interface
 func (v IntArray) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson9f2eff5fEncodeJscancodecBench(&w, v)
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench2(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v IntArray) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson9f2eff5fEncodeJscancodecBench(w, v)
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench2(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *IntArray) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson9f2eff5fDecodeJscancodecBench(&r, v)
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench2(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *IntArray) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson9f2eff5fDecodeJscancodecBench(l, v)
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench2(l, v)
 }
-func easyjson9f2eff5fDecodeJscancodecBench1(in *jlexer.Lexer, out *BoolMatrix) {
+func easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench3(in *jlexer.Lexer, out *BoolMatrix) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -150,30 +358,30 @@ func easyjson9f2eff5fDecodeJscancodecBench1(in *jlexer.Lexer, out *BoolMatrix) {
 					out.Data = (out.Data)[:0]
 				}
 				for !in.IsDelim(']') {
-					var v4 []bool
+					var v9 []bool
 					if in.IsNull() {
 						in.Skip()
-						v4 = nil
+						v9 = nil
 					} else {
 						in.Delim('[')
-						if v4 == nil {
+						if v9 == nil {
 							if !in.IsDelim(']') {
-								v4 = make([]bool, 0, 64)
+								v9 = make([]bool, 0, 64)
 							} else {
-								v4 = []bool{}
+								v9 = []bool{}
 							}
 						} else {
-							v4 = (v4)[:0]
+							v9 = (v9)[:0]
 						}
 						for !in.IsDelim(']') {
-							var v5 bool
-							v5 = bool(in.Bool())
-							v4 = append(v4, v5)
+							var v10 bool
+							v10 = bool(in.Bool())
+							v9 = append(v9, v10)
 							in.WantComma()
 						}
 						in.Delim(']')
 					}
-					out.Data = append(out.Data, v4)
+					out.Data = append(out.Data, v9)
 					in.WantComma()
 				}
 				in.Delim(']')
@@ -188,7 +396,7 @@ func easyjson9f2eff5fDecodeJscancodecBench1(in *jlexer.Lexer, out *BoolMatrix) {
 		in.Consumed()
 	}
 }
-func easyjson9f2eff5fEncodeJscancodecBench1(out *jwriter.Writer, in BoolMatrix) {
+func easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench3(out *jwriter.Writer, in BoolMatrix) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -199,19 +407,19 @@ func easyjson9f2eff5fEncodeJscancodecBench1(out *jwriter.Writer, in BoolMatrix) 
 			out.RawString("null")
 		} else {
 			out.RawByte('[')
-			for v6, v7 := range in.Data {
-				if v6 > 0 {
+			for v11, v12 := range in.Data {
+				if v11 > 0 {
 					out.RawByte(',')
 				}
-				if v7 == nil && (out.Flags&jwriter.NilSliceAsEmpty) == 0 {
+				if v12 == nil && (out.Flags&jwriter.NilSliceAsEmpty) == 0 {
 					out.RawString("null")
 				} else {
 					out.RawByte('[')
-					for v8, v9 := range v7 {
-						if v8 > 0 {
+					for v13, v14 := range v12 {
+						if v13 > 0 {
 							out.RawByte(',')
 						}
-						out.Bool(bool(v9))
+						out.Bool(bool(v14))
 					}
 					out.RawByte(']')
 				}
@@ -225,23 +433,23 @@ func easyjson9f2eff5fEncodeJscancodecBench1(out *jwriter.Writer, in BoolMatrix) 
 // MarshalJSON supports json.Marshaler interface
 func (v BoolMatrix) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson9f2eff5fEncodeJscancodecBench1(&w, v)
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench3(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v BoolMatrix) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson9f2eff5fEncodeJscancodecBench1(w, v)
+	easyjson9f2eff5fEncodeGithubComRomsharkJscanExperimentalDecoderBench3(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *BoolMatrix) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson9f2eff5fDecodeJscancodecBench1(&r, v)
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench3(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *BoolMatrix) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson9f2eff5fDecodeJscancodecBench1(l, v)
+	easyjson9f2eff5fDecodeGithubComRomsharkJscanExperimentalDecoderBench3(l, v)
 }
