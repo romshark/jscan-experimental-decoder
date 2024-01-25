@@ -664,6 +664,122 @@ func TestDecodeStructSlice(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeMapStringToString(t *testing.T) {
+	type M map[string]string
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "2_pairs",
+		`{"foo":"42","bar":"bazz"}`, M{"foo": "42", "bar": "bazz"})
+	s.testOK(t, "empty_strings",
+		`{"":""}`, M{"": ""})
+	s.testOK(t, "multiple_empty_strings",
+		`{"":"", "":""}`, M{"": ""})
+	s.testOK(t, "null_value",
+		`{"":null}`, M{"": ""})
+	s.testOK(t, "duplicate_values",
+		`{"a":"1","a":"2"}`, M{"a": "2"}) // Take last
+	s.testOK(t, "mulitple_overrides",
+		`{"":"1", "":"12", "":"123"}`, M{"": "123"}) // Take last
+	s.testOK(t, "many",
+		`{
+			"foo": "1", "bar": "a", "baz": "2", "muzz": "",
+			"longer_key": "longer test text"
+		}`, M{
+			"foo": "1", "bar": "a", "baz": "2", "muzz": "",
+			"longer_key": "longer test text",
+		})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapStringToMapStringToString(t *testing.T) {
+	type M2 map[string]string
+	type M map[string]M2
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "2_pairs",
+		`{
+			"a":{"a1":"a1val","a2":"a2val"},
+			"b":{"b1":"b1val","b2":"b2val"}
+		}`,
+		M{
+			"a": M2{"a1": "a1val", "a2": "a2val"},
+			"b": M2{"b1": "b1val", "b2": "b2val"},
+		})
+	s.testOK(t, "empty_strings",
+		`{"":{"":""}}`, M{"": M2{"": ""}})
+	s.testOK(t, "multiple_empty_strings",
+		`{"":{"":"", "":""}, "":{"":"", "":""}}`,
+		M{"": M2{"": ""}})
+	s.testOK(t, "null_value",
+		`{"n":null,"x":{"x":null}}`, M{"n": nil, "x": M2{"x": ""}})
+	s.testOK(t, "duplicate_values",
+		`{"a":{"foo":"bar"},"a":{"baz":"faz"}}`,
+		M{"a": M2{"baz": "faz"}}) // Take last
+	s.testOK(t, "mulitple_overrides",
+		`{"":{"a":"b"}, "":{"c":"d"}, "":{"e":"f"}}`,
+		M{"": {"e": "f"}}) // Take last
+	s.testOK(t, "mixed",
+		`{
+			"":{},
+			"first_key":{"f1":"first1_value","f2":"first2_value"},
+			"second_key":null
+		}`, M{
+			"":           M2{},
+			"first_key":  M2{"f1": "first1_value", "f2": "first2_value"},
+			"second_key": nil,
+		})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "map_string_string", `{"foo":"bar"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 7})
+	s.testErr(t, "map_string_map_string_int", `{"foo":{"bar":42}}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 14})
+}
+
+func TestDecodeMapStringToStruct(t *testing.T) {
+	type S struct {
+		Name string `json:"name"`
+		ID   int    `json:"id"`
+	}
+	type M map[string]S
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "one",
+		`{"x":{"name":"first","id":1}}`, M{"x": S{Name: "first", ID: 1}})
+	s.testOK(t, "empty_struct",
+		`{"x":{}}`, M{"x": {}})
+	s.testOK(t, "null_value",
+		`{"":null}`, M{"": {}})
+	s.testOK(t, "multiple",
+		`{
+			"x":{"name":"first","id":1},
+			"y":{"name":"second","id":2}
+		}`, M{
+			"x": S{Name: "first", ID: 1},
+			"y": S{Name: "second", ID: 2},
+		})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "non_object_element", `{"x":42}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 5})
+}
+
 func BenchmarkSmall(b *testing.B) {
 	in := []byte(`[[true],[false,false,false,false],[],[],[true]]`) // 18 tokens
 

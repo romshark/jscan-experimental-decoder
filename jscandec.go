@@ -40,6 +40,7 @@ type ExpectType int8
 
 const (
 	_ ExpectType = iota
+	ExpectTypeMap
 	ExpectTypeArray
 	ExpectTypeSlice
 	ExpectTypeStruct
@@ -63,6 +64,8 @@ const (
 
 func (t ExpectType) String() string {
 	switch t {
+	case ExpectTypeMap:
+		return "map"
 	case ExpectTypeArray:
 		return "array"
 	case ExpectTypeSlice:
@@ -111,25 +114,48 @@ type fieldStackFrame struct {
 	Name string
 }
 
-type stackFrame struct {
+type stackFrame[S []byte | string] struct {
 	// Fields is only relevant to structs.
 	// For every other type Fields is always nil.
 	Fields []fieldStackFrame
 
+	// MapType is relevant to map frames only.
+	MapType reflect.Type
+
+	// LastMapKey is relevant to map frames only.
+	LastMapKey S
+
+	// MapValue is relevant to map frames only.
+	// MapValue is set at runtime and must be reset on every call to Decode
+	// to avoid keeping an unsafe.Pointer to the allocated map and allow the GC
+	// to clean it up if necessary.
+	MapValue reflect.Value
+
 	// Size defines the number of bytes the data would occupy in memory,
 	// except for arrays, for which it defines the static length of the array.
+	// Size could be taken from reflect.Type but it's slower than storing it here.
 	Size uintptr
 
 	// Type defines what data type is expected at this frame.
+	// Same as Size, Type kind could be taken from reflect.Type but it's
+	// slower than storing it here.
 	Type ExpectType
 
 	// Dest defines the destination memory to write the data to.
+	// Dest is set at runtime and must be reset on every call to Decode
+	// to avoid keeping a pointer to the allocated data and allow the GC
+	// to clean it up if necessary.
 	Dest unsafe.Pointer // Overwritten at runtime
 
-	// Offset and AdvanceBy are used at runtime to define where to start from
-	// and how much to advance by if we're currently inside of an array or slice.
+	// Offset is used at runtime for pointer arithmetics if the decoder is
+	// currently inside of an array or slice.
 	// For struct fields however, Offset is assigned statically at decoder init time.
-	Offset, AdvanceBy uintptr // Overwritten at runtime
+	Offset uintptr // Overwritten at runtime
+
+	// AdvanceBy is used at runtime for pointer arithmetics to define
+	// how much to advance the pointer by.
+	// AdvanceBy=0x0 means we're not inside of an array or slice.
+	AdvanceBy uintptr
 
 	// ParentFrameIndex defines the index of the composite parent object in the stack.
 	ParentFrameIndex int
@@ -148,7 +174,7 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 	if t == nil {
 		return ErrNilDest
 	}
-	stack := make([]stackFrame, 0, 4)
+	stack := make([]stackFrame[S], 0, 4)
 	stack = appendTypeToStack(stack, reflect.TypeOf(*t))
 	tokenizer := jscan.NewTokenizer[S](
 		len(stack)+1, len(s)/2,
@@ -163,7 +189,7 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 // Decoder is a reusable decoder instance.
 type Decoder[S []byte | string, T any] struct {
 	tokenizer *jscan.Tokenizer[S]
-	stackExp  []stackFrame
+	stackExp  []stackFrame[S]
 }
 
 // NewDecoder creates a new reusable decoder instance.
@@ -173,7 +199,7 @@ type Decoder[S []byte | string, T any] struct {
 func NewDecoder[S []byte | string, T any](tokenizer *jscan.Tokenizer[S]) *Decoder[S, T] {
 	d := &Decoder[S, T]{
 		tokenizer: tokenizer,
-		stackExp:  make([]stackFrame, 0, 4),
+		stackExp:  make([]stackFrame[S], 0, 4),
 	}
 
 	var z T
@@ -183,11 +209,11 @@ func NewDecoder[S []byte | string, T any](tokenizer *jscan.Tokenizer[S]) *Decode
 }
 
 // appendTypeToStack will recursively flat-append stack frames recursing into t.
-func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
+func appendTypeToStack[S []byte | string](stack []stackFrame[S], t reflect.Type) []stackFrame[S] {
 	switch t.Kind() {
 	case reflect.Array:
 		parentIndex := len(stack)
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
 			Type:             ExpectTypeArray,
 			ParentFrameIndex: len(stack) - 1,
@@ -200,7 +226,7 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 
 	case reflect.Slice:
 		parentIndex := len(stack)
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
 			Type:             ExpectTypeSlice,
 			ParentFrameIndex: len(stack) - 1,
@@ -211,10 +237,33 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 		// Link slice element to the slice frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
 
+	case reflect.Map:
+		parentIndex := len(stack)
+		stack = append(stack, stackFrame[S]{
+			// The map will be handled via reflect.Value
+			// hence the size is not t.Size().
+			Size:             t.Size(),
+			Type:             ExpectTypeMap,
+			ParentFrameIndex: len(stack) - 1,
+			MapType:          t,
+		})
+		{
+			newAtIndex := len(stack)
+			stack = appendTypeToStack(stack, t.Key())
+			// Link map key to the map frame.
+			stack[newAtIndex].ParentFrameIndex = parentIndex
+		}
+		{
+			newAtIndex := len(stack)
+			stack = appendTypeToStack(stack, t.Elem())
+			// Link map value to the map frame.
+			stack[newAtIndex].ParentFrameIndex = parentIndex
+		}
+
 	case reflect.Struct:
 		parentIndex := len(stack)
 		numFields := t.NumField()
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Fields:           make([]fieldStackFrame, 0, numFields),
 			Size:             t.Size(),
 			Type:             ExpectTypeStruct,
@@ -263,85 +312,85 @@ func appendTypeToStack(stack []stackFrame, t reflect.Type) []stackFrame {
 		}
 
 	case reflect.Bool:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeBool,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.String:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeStr,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Int:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Int8:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt8,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Int16:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt16,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Int32:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt32,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Int64:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt64,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Uint:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Uint8:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint8,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Uint16:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint16,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Uint32:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint32,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Uint64:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint64,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Float32:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeFloat32,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
 	case reflect.Float64:
-		stack = append(stack, stackFrame{
+		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeFloat64,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
@@ -360,11 +409,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 	defer func() {
 		for i := range d.stackExp {
 			d.stackExp[i].Dest = nil
+			d.stackExp[i].MapValue = reflect.Value{}
 		}
 	}()
-	// for i, v := range d.stackExp {
-	// 	fmt.Printf("%d: %s (%d)\n", i, v.Type.String(), v.Size)
-	// } // TODO: remove DEBUG
 
 	if t == nil {
 		return ErrorDecode{Err: ErrNilDest}
@@ -452,13 +499,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 	si := 0
 	d.stackExp[0].Dest = unsafe.Pointer(t)
-	// fmt.Println("ORIG PTR: ", d.stackExpect[0].Destination())
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token) (exit bool) {
-		// defer fmt.Println(" ")
-		// fmt.Println("TOKENS: ", len(tokens), "/", cap(tokens))
 		for ti := 0; ti < len(tokens); ti++ {
-			// fmt.Println(" ")
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
 				if d.stackExp[si].Type != ExpectTypeBool {
@@ -470,9 +513,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				}
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				*(*bool)(p) = tokens[ti].Type == jscan.TokenTypeTrue
-				if d.stackExp[si].AdvanceBy > 0 {
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-				}
+				goto ON_VAL_END
 
 			case jscan.TokenTypeInteger:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
@@ -647,9 +688,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
-				if d.stackExp[si].AdvanceBy > 0 {
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-				}
+				goto ON_VAL_END
 
 			case jscan.TokenTypeNumber:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
@@ -668,9 +707,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
 					return true
 				}
-				if d.stackExp[si].AdvanceBy > 0 {
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-				}
+				goto ON_VAL_END
 
 			case jscan.TokenTypeString:
 				if d.stackExp[si].Type != ExpectTypeStr {
@@ -683,16 +720,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				// This will either copy from a byte slice or create a substring
 				*(*string)(p) = string(s[tokens[ti].Index+1 : tokens[ti].End-1])
-				if d.stackExp[si].AdvanceBy > 0 {
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-				}
+				goto ON_VAL_END
 
 			case jscan.TokenTypeNull:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				writeNullValue(d.stackExp[si].Type, p)
-				if d.stackExp[si].AdvanceBy > 0 {
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-				}
+				goto ON_VAL_END
 
 			case jscan.TokenTypeArray:
 				switch d.stackExp[si].Type {
@@ -718,9 +751,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if d.stackExp[si].AdvanceBy > 0 {
-						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-					}
 
 					si++
 					d.stackExp[si].Dest = p
@@ -733,9 +763,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if d.stackExp[si].AdvanceBy > 0 {
-						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
-					}
 
 					var dp unsafe.Pointer
 					if elems := uintptr(tokens[ti].Elements); elems == 0 {
@@ -745,11 +772,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					} else {
 						dp = allocate(elems * elementSize)
 						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: elems, Cap: elems}
+
+						si++
+						d.stackExp[si].Dest = dp
+						d.stackExp[si].Offset = 0
+						d.stackExp[si].AdvanceBy = elementSize
 					}
-					si++
-					d.stackExp[si].Dest = dp
-					d.stackExp[si].Offset = 0
-					d.stackExp[si].AdvanceBy = elementSize
 
 				default:
 					err = ErrorDecode{
@@ -761,14 +789,27 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 			case jscan.TokenTypeObject:
 				switch d.stackExp[si].Type {
-				// TODO: add support for map
-				case ExpectTypeStruct:
+				case ExpectTypeMap:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if d.stackExp[si].AdvanceBy > 0 {
-						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
+					d.stackExp[si].MapValue = reflect.MakeMapWithSize(
+						d.stackExp[si].MapType, tokens[ti].Elements,
+					)
+					*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
+					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
+						ti++
+						goto ON_VAL_END
 					}
+
+				case ExpectTypeStruct:
+					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
+						ti++
+						goto ON_VAL_END
+					}
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
 					// Point all fields to the struct, the offsets are already
 					// set statically during decoder init time.
 					for i := range d.stackExp[si].Fields {
@@ -783,26 +824,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				}
 
 			case jscan.TokenTypeKey:
-				if tokens[ti-1].Type != jscan.TokenTypeObject {
-					// Exit previous key first
-					si = d.stackExp[si].ParentFrameIndex
-					if si < 0 {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
-						return true
-					}
-				}
 				switch d.stackExp[si].Type {
 				case ExpectTypeStruct:
 				SCAN_KEYVALS:
 					for {
 						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
-						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
+						frameIndex := fieldFrameIndexByName(
+							d.stackExp[si].Fields, key,
+						)
 						if frameIndex == -1 {
 							// TODO: return error when option for unknown fields is enabled
-							// Skip to the next key
+							// Skip value, go to the next key
 							ti++
 							for l := 0; ; ti++ {
 								switch tokens[ti].Type {
@@ -815,6 +847,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 								case jscan.TokenTypeObjectEnd:
 									l--
 									if l < 1 {
+										ti--
 										break SCAN_KEYVALS
 									}
 								}
@@ -831,6 +864,42 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						break
 					}
 
+				case ExpectTypeMap:
+					// Record the key for insertion (once the value is read)
+					d.stackExp[si].LastMapKey = s[tokens[ti].Index+1 : tokens[ti].End-1]
+
+					// The key frame is guaranteed to be non-composite (single frame)
+					// and at an offset of 1 relative to the map frame index.
+					switch d.stackExp[si+1].Type {
+					case ExpectTypeStr:
+						// No checks necessary
+					case ExpectTypeInt:
+						panic("TODO") // TODO: make sure the key is a valid int
+					case ExpectTypeInt8:
+						panic("TODO") // TODO: make sure the key is a valid int8
+					case ExpectTypeInt16:
+						panic("TODO") // TODO: make sure the key is a valid int16
+					case ExpectTypeInt32:
+						panic("TODO") // TODO: make sure the key is a valid int32
+					case ExpectTypeInt64:
+						panic("TODO") // TODO: make sure the key is a valid int64
+					case ExpectTypeUint:
+						panic("TODO") // TODO: make sure the key is a valid uint
+					case ExpectTypeUint8:
+						panic("TODO") // TODO: make sure the key is a valid uint8
+					case ExpectTypeUint16:
+						panic("TODO") // TODO: make sure the key is a valid uint16
+					case ExpectTypeUint32:
+						panic("TODO") // TODO: make sure the key is a valid uint32
+					case ExpectTypeUint64:
+						panic("TODO") // TODO: make sure the key is a valid uint64
+					}
+
+					// The value frame is guaranteed to be at an offset of 2
+					// relative to the map frame index.
+					si += 2
+					d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -838,11 +907,33 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
+
 			case jscan.TokenTypeObjectEnd:
-				// Go up the stack if current frame is a field
-				if pi := d.stackExp[si].ParentFrameIndex; pi != -1 &&
-					d.stackExp[pi].Fields != nil {
-					si = d.stackExp[si].ParentFrameIndex
+				goto ON_VAL_END
+			case jscan.TokenTypeArrayEnd:
+				if tokens[tokens[ti].End].Elements != 0 {
+					si--
+				}
+				goto ON_VAL_END
+			}
+			continue
+		ON_VAL_END:
+			if siParent := d.stackExp[si].ParentFrameIndex; siParent > -1 {
+				switch d.stackExp[siParent].Type {
+				case ExpectTypeArray, ExpectTypeSlice:
+					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
+				case ExpectTypeMap:
+					// Add key-value pair to the map
+					key := d.stackExp[siParent].LastMapKey
+					d.stackExp[siParent].MapValue.SetMapIndex(
+						reflect.ValueOf(string(key)),
+						reflect.NewAt(
+							d.stackExp[siParent].MapType.Elem(), d.stackExp[si].Dest,
+						).Elem(),
+					)
+					fallthrough
+				case ExpectTypeStruct:
+					si = siParent
 					if si < 0 {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -851,18 +942,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						return true
 					}
 				}
-			case jscan.TokenTypeArrayEnd:
-				si = d.stackExp[si].ParentFrameIndex
-				if si < 0 {
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
-					return true
-				}
 			}
-			// fmt.Printf("T%d: %s at %d\n", ti, tokens[ti].Type.String(), tokens[ti].Index)
-			// fmt.Printf("expect: %#v\n", d.stackExpect[si].Type.String())
 		}
 		return false
 	})

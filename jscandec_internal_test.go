@@ -23,11 +23,11 @@ func TestAppendTypeToStack(t *testing.T) {
 
 	for _, td := range []struct {
 		Input       any
-		ExpectStack []stackFrame
+		ExpectStack []stackFrame[string]
 	}{
 		{
 			Input: string(""),
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
@@ -37,7 +37,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: int(0),
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
@@ -47,7 +47,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: S1{},
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{ // S1
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "foo"},
@@ -66,14 +66,14 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
 					ParentFrameIndex: 0,
-					Offset:           8,
+					Offset:           reflect.TypeOf(S1{}).Field(1).Offset,
 				},
 			},
 		},
 		{
 			Input: S2{},
-			ExpectStack: []stackFrame{
-				{ // S1
+			ExpectStack: []stackFrame[string]{
+				{ // S2
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "S1"},
 						{FrameIndex: 4, Name: "Bar"},
@@ -83,7 +83,7 @@ func TestAppendTypeToStack(t *testing.T) {
 					Type:             ExpectTypeStruct,
 					ParentFrameIndex: -1,
 				},
-				{ // S1.S2
+				{ // S2.S1
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "foo"},
 						{FrameIndex: 3, Name: "bar"},
@@ -92,12 +92,12 @@ func TestAppendTypeToStack(t *testing.T) {
 					Type:             ExpectTypeStruct,
 					ParentFrameIndex: 0,
 				},
-				{ // S1.S2.Foo
+				{ // S2.S1.Foo
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
 					ParentFrameIndex: 1,
 				},
-				{ // S1.S2.Bar
+				{ // S2.S1.Bar
 					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
 					ParentFrameIndex: 1,
@@ -124,7 +124,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: []byte{},
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf([]byte{}).Size(),
 					Type:             ExpectTypeSlice,
@@ -139,7 +139,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: [][][]string{},
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf([][][]string{}).Size(),
 					Type:             ExpectTypeSlice,
@@ -164,7 +164,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: []S1{},
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{ // []
 					Size:             reflect.TypeOf([]S1{}).Size(),
 					Type:             ExpectTypeSlice,
@@ -194,7 +194,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 		{
 			Input: [4]int{},
-			ExpectStack: []stackFrame{
+			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf([4]int{}).Size(),
 					Type:             ExpectTypeArray,
@@ -207,9 +207,100 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: map[string]string{},
+			ExpectStack: []stackFrame[string]{
+				{
+					MapType:          reflect.TypeOf(map[string]string{}),
+					Size:             reflect.TypeOf(map[string]string{}).Size(),
+					Type:             ExpectTypeMap,
+					ParentFrameIndex: -1,
+				},
+				{ // Key frame
+					Size:             reflect.TypeOf(string("")).Size(),
+					Type:             ExpectTypeStr,
+					ParentFrameIndex: 0,
+				},
+				{ // Value frame
+					Size:             reflect.TypeOf(string("")).Size(),
+					Type:             ExpectTypeStr,
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[int]S1{},
+			ExpectStack: []stackFrame[string]{
+				{
+					MapType:          reflect.TypeOf(map[int]S1{}),
+					Size:             reflect.TypeOf(map[int]S1{}).Size(),
+					Type:             ExpectTypeMap,
+					ParentFrameIndex: -1,
+				},
+				{ // Key frame
+					Size:             reflect.TypeOf(int(0)).Size(),
+					Type:             ExpectTypeInt,
+					ParentFrameIndex: 0,
+				},
+				{ // S1
+					Fields: []fieldStackFrame{
+						{FrameIndex: 3, Name: "foo"},
+						{FrameIndex: 4, Name: "bar"},
+					},
+					Size:             reflect.TypeOf(S1{}).Size(),
+					Type:             ExpectTypeStruct,
+					ParentFrameIndex: 0,
+				},
+				{ // S1.Foo
+					Size:             reflect.TypeOf(int(0)).Size(),
+					Type:             ExpectTypeInt,
+					ParentFrameIndex: 2,
+				},
+				{ // S1.Bar
+					Size:             reflect.TypeOf(string("")).Size(),
+					Type:             ExpectTypeStr,
+					ParentFrameIndex: 2,
+					Offset:           reflect.TypeOf(S1{}).Field(1).Offset,
+				},
+			},
+		},
+		{
+			Input: map[int]map[string]float32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:    ExpectTypeMap,
+					MapType: reflect.TypeOf(map[int]map[string]float32{}),
+					Size: reflect.TypeOf(
+						map[int]map[string]float32{},
+					).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{
+					Type:             ExpectTypeMap,
+					MapType:          reflect.TypeOf(map[string]float32{}),
+					Size:             reflect.TypeOf(map[string]float32{}).Size(),
+					ParentFrameIndex: 0,
+				},
+				{
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 2,
+				},
+				{
+					Type:             ExpectTypeFloat32,
+					Size:             reflect.TypeOf(float32(0)).Size(),
+					ParentFrameIndex: 2,
+				},
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
-			actual := appendTypeToStack(nil, reflect.TypeOf(td.Input))
+			actual := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
 			require.Equal(t, len(td.ExpectStack), len(actual),
 				"unexpected number of frames:", actual)
 			for i, expect := range td.ExpectStack {
