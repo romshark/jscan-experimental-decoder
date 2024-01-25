@@ -119,7 +119,7 @@ func GJSONArrayBool2D(j []byte) ([][]bool, error) {
 
 func GJSONArrayInt(j []byte) ([]int, error) {
 	if !gjson.ValidBytes(j) {
-		return nil, errors.New("invalid")
+		return nil, ErrInvalid
 	}
 	l := gjson.ParseBytes(j).Array()
 	a := make([]int, 0, len(l))
