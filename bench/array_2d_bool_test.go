@@ -14,6 +14,7 @@ import (
 	easyjson "github.com/mailru/easyjson"
 	ffjson "github.com/pquerna/ffjson/ffjson"
 	jscan "github.com/romshark/jscan/v2"
+	segmentio "github.com/segmentio/encoding/json"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,6 +69,12 @@ func TestImplementationsDecode2DArrayBool(t *testing.T) {
 		require.Equal(t, expect(), v)
 	})
 
+	t.Run("segmention", func(t *testing.T) {
+		var v [][]bool
+		require.NoError(t, segmentio.Unmarshal([]byte(in), &v))
+		require.Equal(t, expect(), v)
+	})
+
 	t.Run("jscan/decoder", func(t *testing.T) {
 		d := jscandec.NewDecoder[[]byte, [][]bool](jscan.NewTokenizer[[]byte](2048, 2048*1024))
 		var v [][]bool
@@ -87,7 +94,7 @@ func TestImplementationsDecode2DArrayBool(t *testing.T) {
 
 	t.Run("jscan/handwritten", func(t *testing.T) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		v, err := bench.DecodeArray2DCustomParser(tokenizer, []byte(in))
+		v, err := bench.JscanBoolMatrix(tokenizer, []byte(in))
 		require.NoError(t, err)
 		require.Equal(t, expect(), v)
 	})
@@ -166,6 +173,15 @@ func BenchmarkDecode2DArrayBool(b *testing.B) {
 		}
 	})
 
+	b.Run("segmention", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			var v [][]bool
+			if err := segmentio.Unmarshal(in, &v); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
 		d := jscandec.NewDecoder[[]byte, [][]bool](tokenizer)
@@ -193,22 +209,10 @@ func BenchmarkDecode2DArrayBool(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var err error
-			if v, err = bench.DecodeArray2DCustomParser(tokenizer, in); err != nil {
+			if v, err = bench.JscanBoolMatrix(tokenizer, in); err != nil {
 				b.Fatal(err)
 			}
 		}
 		runtime.KeepAlive(v)
 	})
-
-	// b.Run("jscan2", func(b *testing.B) {
-	// 	tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-	// 	d := NewDecoder2[[]byte, [][]bool](tokenizer)
-	// 	b.ResetTimer()
-	// 	for n := 0; n < b.N; n++ {
-	// 		var v [][]bool
-	// 		if err := d.Decode(in, &v); err.IsErr() {
-	// 			b.Fatal(err)
-	// 		}
-	// 	}
-	// })
 }

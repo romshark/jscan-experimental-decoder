@@ -8,6 +8,7 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
 	goccy "github.com/goccy/go-json"
@@ -76,6 +77,12 @@ func TestImplementationsDecodeArrayInt(t *testing.T) {
 		require.Equal(t, expect, v)
 	})
 
+	t.Run("segmentio", func(t *testing.T) {
+		var v []int
+		require.NoError(t, segmentio.Unmarshal([]byte(in), &v))
+		require.Equal(t, expect, v)
+	})
+
 	t.Run("jscan", func(t *testing.T) {
 		d := jscandec.NewDecoder[[]byte, []int](jscan.NewTokenizer[[]byte](2048, 2048*1024))
 		var v []int
@@ -96,7 +103,7 @@ func TestImplementationsDecodeArrayInt(t *testing.T) {
 
 	t.Run("jscantok", func(t *testing.T) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		v, err := bench.DecodeArrayIntCustomParser(tokenizer, []byte(in))
+		v, err := bench.JscanIntSlice(tokenizer, []byte(in))
 		require.NoError(t, err)
 		require.Equal(t, expect, v)
 	})
@@ -189,6 +196,15 @@ func BenchmarkDecodeArrayInt12K(b *testing.B) {
 		}
 	})
 
+	b.Run("segmentio", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			var v []int
+			if err := segmentio.Unmarshal(in, &v); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
 	b.Run("jscan_decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
 		d := jscandec.NewDecoder[[]byte, []int](tokenizer)
@@ -216,7 +232,7 @@ func BenchmarkDecodeArrayInt12K(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var err error
-			if v, err = bench.DecodeArrayIntCustomParser(tokenizer, in); err != nil {
+			if v, err = bench.JscanIntSlice(tokenizer, in); err != nil {
 				b.Fatal(err)
 			}
 		}

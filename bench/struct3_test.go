@@ -7,6 +7,7 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
 	goccy "github.com/goccy/go-json"
@@ -79,6 +80,12 @@ func TestImplementationsStruct3(t *testing.T) {
 		require.Equal(t, expect(), v)
 	})
 
+	t.Run("segmentio", func(t *testing.T) {
+		var v bench.Struct3
+		require.NoError(t, segmentio.Unmarshal([]byte(in), &v))
+		require.Equal(t, expect(), v)
+	})
+
 	t.Run("jscan/decoder", func(t *testing.T) {
 		d := jscandec.NewDecoder[[]byte, bench.Struct3](
 			jscan.NewTokenizer[[]byte](32, len(in)/2),
@@ -100,7 +107,7 @@ func TestImplementationsStruct3(t *testing.T) {
 
 	t.Run("jscan/handwritten", func(t *testing.T) {
 		tokenizer := jscan.NewTokenizer[[]byte](8, len(in)/2)
-		v, err := bench.JscanDecodeStruct3(tokenizer, []byte(in))
+		v, err := bench.JscanStruct3(tokenizer, []byte(in))
 		require.NoError(t, err)
 		require.Equal(t, expect(), v)
 	})
@@ -191,6 +198,16 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 		}
 	})
 
+	b.Run("segmentio", func(b *testing.B) {
+		var v bench.Struct3
+		b.ResetTimer()
+		for n := 0; n < b.N; n++ {
+			if err := segmentio.Unmarshal(in, &v); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](32, 128)
 		d := jscandec.NewDecoder[[]byte, bench.Struct3](tokenizer)
@@ -219,7 +236,7 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var err error
-			if v, err = bench.JscanDecodeStruct3(tokenizer, in); err != nil {
+			if v, err = bench.JscanStruct3(tokenizer, in); err != nil {
 				b.Fatal(err)
 			}
 		}

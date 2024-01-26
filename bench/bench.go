@@ -11,7 +11,7 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-func DecodeArray2DCustomParser[S []byte | string](
+func JscanBoolMatrix[S []byte | string](
 	t *jscan.Tokenizer[S], str S,
 ) (s [][]bool, err error) {
 	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
@@ -56,7 +56,7 @@ func DecodeArray2DCustomParser[S []byte | string](
 	return s, nil
 }
 
-func DecodeArrayIntCustomParser[S []byte | string](
+func JscanIntSlice[S []byte | string](
 	t *jscan.Tokenizer[S], str S,
 ) (s []int, err error) {
 	var sz S
@@ -128,7 +128,7 @@ func JscanMapStringString[S []byte | string](
 	return m, nil
 }
 
-func JscanDecodeStruct3[S []byte | string](
+func JscanStruct3[S []byte | string](
 	t *jscan.Tokenizer[S], src S,
 ) (s Struct3, err error) {
 	errk := t.Tokenize(src, func(tokens []jscan.Token[S]) bool {

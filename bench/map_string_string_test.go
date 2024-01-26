@@ -7,6 +7,7 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
 	goccy "github.com/goccy/go-json"
@@ -65,6 +66,12 @@ func TestImplementationsMapStringString(t *testing.T) {
 	t.Run("jsonv2", func(t *testing.T) {
 		var v map[string]string
 		require.NoError(t, jsonv2.Unmarshal([]byte(in), &v))
+		require.Equal(t, expect(), v)
+	})
+
+	t.Run("segmentio", func(t *testing.T) {
+		var v map[string]string
+		require.NoError(t, segmentio.Unmarshal([]byte(in), &v))
 		require.Equal(t, expect(), v)
 	})
 
@@ -161,6 +168,15 @@ func BenchmarkDecodeMapStringString(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			var v map[string]string
 			if err := jsonv2.Unmarshal(in, &v); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("segmentio", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			var v map[string]string
+			if err := segmentio.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
 		}
