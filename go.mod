@@ -3,7 +3,7 @@ module github.com/romshark/jscan-experimental-decoder
 go 1.21.6
 
 // Use branch "tokenizer" which isn't merged yet.
-replace github.com/romshark/jscan/v2 => github.com/romshark/jscan/v2 v2.0.3-0.20240106235843-3f8c8b3daccf
+replace github.com/romshark/jscan/v2 => github.com/romshark/jscan/v2 v2.0.0-20240125233239-f1e817ac892f
 
 require (
 	github.com/go-json-experiment/json v0.0.0-20231102232822-2e55bd4e08b0

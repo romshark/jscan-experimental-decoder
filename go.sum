@@ -28,8 +28,8 @@ github.com/pquerna/ffjson v0.0.0-20190930134022-aa0246cd15f7 h1:xoIK0ctDddBMnc74
 github.com/pquerna/ffjson v0.0.0-20190930134022-aa0246cd15f7/go.mod h1:YARuvh7BUWHNhzDq2OM5tzR2RiCcN2D7sapiKyCel/M=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
-github.com/romshark/jscan/v2 v2.0.3-0.20240106235843-3f8c8b3daccf h1:0sKbx1aW4mtLfjTGxEWMcYhGeZX7L9PHtglJvHeWfmQ=
-github.com/romshark/jscan/v2 v2.0.3-0.20240106235843-3f8c8b3daccf/go.mod h1:H+vA/18JDD4ifVMk69hoMbyRVs+f0fKEIgC1e0y+af8=
+github.com/romshark/jscan/v2 v2.0.0-20240125233239-f1e817ac892f h1:JMVxmm71jArAbflFQ9FlyDrG0Zxd+lsFBpXKqG8fiOU=
+github.com/romshark/jscan/v2 v2.0.0-20240125233239-f1e817ac892f/go.mod h1:H+vA/18JDD4ifVMk69hoMbyRVs+f0fKEIgC1e0y+af8=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
