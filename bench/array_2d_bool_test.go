@@ -69,7 +69,7 @@ func TestImplementationsDecode2DArrayBool(t *testing.T) {
 		require.Equal(t, expect(), v)
 	})
 
-	t.Run("segmention", func(t *testing.T) {
+	t.Run("segmentio", func(t *testing.T) {
 		var v [][]bool
 		require.NoError(t, segmentio.Unmarshal([]byte(in), &v))
 		require.Equal(t, expect(), v)
@@ -173,7 +173,7 @@ func BenchmarkDecode2DArrayBool(b *testing.B) {
 		}
 	})
 
-	b.Run("segmention", func(b *testing.B) {
+	b.Run("segmentio", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			var v [][]bool
 			if err := segmentio.Unmarshal(in, &v); err != nil {
