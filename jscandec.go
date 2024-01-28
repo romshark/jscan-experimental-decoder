@@ -832,9 +832,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					v, tail, err := decodeAny(s, tokens[ti:])
+					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					ti = len(tokens[ti:]) - len(tail)
-					if err != nil {
+					if errDecode != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
 							Index: tokens[ti].Index,
@@ -907,9 +907,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					v, tail, err := decodeAny(s, tokens[ti:])
+					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					ti = len(tokens[ti:]) - len(tail)
-					if err != nil {
+					if errDecode != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
 							Index: tokens[ti].Index,
