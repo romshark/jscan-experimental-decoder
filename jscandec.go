@@ -223,6 +223,16 @@ func appendTypeToStack[S []byte | string](
 		})
 	}
 	switch t.Kind() {
+	case reflect.Interface:
+		if t.NumMethod() != 0 {
+			// TODO:
+			panic("not yet supported")
+		}
+		return append(stack, stackFrame[S]{
+			Type:             ExpectTypeAny,
+			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
+			ParentFrameIndex: len(stack) - 1,
+		})
 	case reflect.Array:
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame[S]{
