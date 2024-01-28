@@ -20,11 +20,11 @@ Roadmap:
 - [x] Struct types
 - [x] Slices
 - [x] Arrays
+- [x] Type `any`
+- [x] Type `map`
 - [ ] JSON struct tags
     - [x] Case-insensitive key matching.
     - [ ] Option `string`
 - [ ] Pointers
-- [ ] Type `any`
-- [x] Type `map`
 - [ ] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [ ] Type `json.RawMessage`
