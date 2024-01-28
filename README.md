@@ -27,4 +27,5 @@ Roadmap:
     - [ ] Option `string`
 - [ ] Pointers
 - [ ] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
+- [ ] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
 - [ ] Type `json.RawMessage`
