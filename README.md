@@ -5,7 +5,7 @@
     <img src='https://coveralls.io/repos/github/romshark/jscan-experimental-decoder/badge.svg?branch=main' alt='Coverage Status' />
 </a>
 
-# Experimental JSON decoder based on [jscan](github.com/romshark/jscan)
+# Experimental JSON decoder based on [jscan](https://github.com/romshark/jscan)
 
 ⚠️ Don't use in production! ⚠️
 
