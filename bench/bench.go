@@ -11,6 +11,67 @@ import (
 	"github.com/valyala/fastjson"
 )
 
+func JscanAny[S []byte | string](
+	t *jscan.Tokenizer[S], str S,
+) (s any, err error) {
+	var decode func(tokens []jscan.Token[S]) (any, []jscan.Token[S], error)
+	decode = func(tokens []jscan.Token[S]) (any, []jscan.Token[S], error) {
+		switch tokens[0].Type {
+		case jscan.TokenTypeNull:
+			return nil, tokens[1:], nil
+		case jscan.TokenTypeNumber, jscan.TokenTypeInteger:
+			var f64 float64
+			f64, err = tokens[0].Float64(str)
+			return f64, tokens[1:], nil
+		case jscan.TokenTypeTrue:
+			return true, tokens[1:], nil
+		case jscan.TokenTypeFalse:
+			return false, tokens[1:], nil
+		case jscan.TokenTypeString:
+			return string(str[tokens[0].Index+1 : tokens[0].End-1]), tokens[1:], nil
+		case jscan.TokenTypeArray:
+			l := make([]any, 0, tokens[0].Elements)
+			for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeArrayEnd; {
+				var v any
+				var err error
+				if v, tokens, err = decode(tokens); err != nil {
+					return nil, nil, err
+				}
+				l = append(l, v)
+			}
+			return l, tokens[1:], nil
+		case jscan.TokenTypeObject:
+			if tokens[0].Elements == 0 {
+				return map[string]any{}, tokens[2:], nil
+			}
+			m := make(map[string]any, tokens[0].Elements)
+			for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeObjectEnd; {
+				key := str[tokens[0].Index+1 : tokens[0].End-1]
+				var v any
+				var err error
+				if v, tokens, err = decode(tokens[1:]); err != nil {
+					return nil, nil, err
+				}
+				m[string(key)] = v
+			}
+			return m, tokens[1:], nil
+		}
+		return nil, nil, nil
+	}
+
+	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+		s, _, err = decode(tokens)
+		return err != nil
+	})
+	if errk.IsErr() {
+		if errk.Code == jscan.ErrorCodeCallback {
+			return nil, err
+		}
+		return nil, errk
+	}
+	return s, nil
+}
+
 func JscanBoolMatrix[S []byte | string](
 	t *jscan.Tokenizer[S], str S,
 ) (s [][]bool, err error) {
@@ -175,6 +236,13 @@ func JscanStruct3[S []byte | string](
 		return s, errk
 	}
 	return s, nil
+}
+
+func GJSONAny(j []byte) (any, error) {
+	if !gjson.ValidBytes(j) {
+		return nil, errors.New("invalid")
+	}
+	return gjson.ParseBytes(j).Value(), nil
 }
 
 func GJSONArrayBool2D(j []byte) ([][]bool, error) {

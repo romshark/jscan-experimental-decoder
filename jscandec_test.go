@@ -111,6 +111,42 @@ func TestDecodeBool(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeAny(t *testing.T) {
+	s := newTestSetup[any]()
+	s.testOK(t, "int_0", `0`, float64(0))
+	s.testOK(t, "int_42", `42`, float64(42))
+	s.testOK(t, "number", `3.1415`, float64(3.1415))
+	s.testOK(t, "true", `true`, true)
+	s.testOK(t, "false", `false`, false)
+	s.testOK(t, "string", `"string"`, "string")
+	s.testOK(t, "null", `null`, nil)
+	s.testOK(t, "array_empty", `[]`, []any{})
+	s.testOK(t, "array_int", `[0,1,2]`, []any{float64(0), float64(1), float64(2)})
+	s.testOK(t, "array_string", `["a", "b"]`, []any{"a", "b"})
+	s.testOK(t, "array_bool", `[true, false]`, []any{true, false})
+	s.testOK(t, "array_null", `[null, null, null]`, []any{nil, nil, nil})
+	s.testOK(t, "object_empty", `{}`, map[string]any{})
+	s.testOK(t, "array_mix", `[null, false, 42, "x", {}, true]`,
+		[]any{nil, false, float64(42), "x", map[string]any{}, true})
+	s.testOK(t, "object_multi", `{
+		"num":         42,
+		"str":         "text",
+		"bool_true":   true,
+		"bool_false":  false,
+		"array_empty": [],
+		"array_mix":   [null, false, 42, "x", {}, true],
+		"null":        null
+	}`, map[string]any{
+		"num":         float64(42),
+		"str":         "text",
+		"bool_true":   true,
+		"bool_false":  false,
+		"array_empty": []any{},
+		"array_mix":   []any{nil, false, float64(42), "x", map[string]any{}, true},
+		"null":        nil,
+	})
+}
+
 func TestDecodeUint(t *testing.T) {
 	require64bitSystem(t)
 	s := newTestSetup[uint]()

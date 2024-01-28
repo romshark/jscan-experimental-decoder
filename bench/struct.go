@@ -3,6 +3,10 @@ package bench
 //go:generate easyjson -all struct.go
 //go:generate ffjson $GOFILE
 
+type Any struct {
+	Data any `json:"data"`
+}
+
 type BoolMatrix struct {
 	Data [][]bool `json:"data"`
 }

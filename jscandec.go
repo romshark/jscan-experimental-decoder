@@ -40,6 +40,7 @@ type ExpectType int8
 
 const (
 	_ ExpectType = iota
+	ExpectTypeAny
 	ExpectTypeMap
 	ExpectTypeArray
 	ExpectTypeSlice
@@ -64,6 +65,8 @@ const (
 
 func (t ExpectType) String() string {
 	switch t {
+	case ExpectTypeAny:
+		return "any"
 	case ExpectTypeMap:
 		return "map"
 	case ExpectTypeArray:
@@ -209,7 +212,16 @@ func NewDecoder[S []byte | string, T any](tokenizer *jscan.Tokenizer[S]) *Decode
 }
 
 // appendTypeToStack will recursively flat-append stack frames recursing into t.
-func appendTypeToStack[S []byte | string](stack []stackFrame[S], t reflect.Type) []stackFrame[S] {
+func appendTypeToStack[S []byte | string](
+	stack []stackFrame[S], t reflect.Type,
+) []stackFrame[S] {
+	if t == nil {
+		return append(stack, stackFrame[S]{
+			Type:             ExpectTypeAny,
+			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
+			ParentFrameIndex: len(stack) - 1,
+		})
+	}
 	switch t.Kind() {
 	case reflect.Array:
 		parentIndex := len(stack)
@@ -504,20 +516,47 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 		for ti := 0; ti < len(tokens); ti++ {
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
-				if d.stackExp[si].Type != ExpectTypeBool {
+				p := unsafe.Pointer(
+					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+				)
+				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					v := tokens[ti].Type == jscan.TokenTypeTrue
+					**(**interface{})(unsafe.Pointer(&p)) = v
+				case ExpectTypeBool:
+					*(*bool)(p) = tokens[ti].Type == jscan.TokenTypeTrue
+				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
 						Index: tokens[ti].Index,
 					}
 					return true
 				}
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
-				*(*bool)(p) = tokens[ti].Type == jscan.TokenTypeTrue
 				goto ON_VAL_END
 
 			case jscan.TokenTypeInteger:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					tv := s[tokens[ti].Index:tokens[ti].End]
+					var sz S
+					var su string
+					switch any(sz).(type) {
+					case []byte:
+						su = unsafe.String(unsafe.SliceData([]byte(tv)), len(tv))
+					case string:
+						su = string(tv)
+					}
+					v, errParse := strconv.ParseFloat(su, 64)
+					if errParse != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					**(**interface{})(unsafe.Pointer(&p)) = v
+
 				case ExpectTypeUint:
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
@@ -693,6 +732,26 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeNumber:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					tv := s[tokens[ti].Index:tokens[ti].End]
+					var sz S
+					var su string
+					switch any(sz).(type) {
+					case []byte:
+						su = unsafe.String(unsafe.SliceData([]byte(tv)), len(tv))
+					case string:
+						su = string(tv)
+					}
+					v, errParse := strconv.ParseFloat(su, 64)
+					if errParse != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					**(**interface{})(unsafe.Pointer(&p)) = v
+
 				case ExpectTypeFloat32:
 					if e := fnA2F32(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
@@ -710,25 +769,80 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeString:
-				if d.stackExp[si].Type != ExpectTypeStr {
+				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
+				tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					**(**interface{})(unsafe.Pointer(&p)) = string(tv)
+				case ExpectTypeStr:
+					*(*string)(p) = string(tv)
+				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
 						Index: tokens[ti].Index,
 					}
 					return true
 				}
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				// This will either copy from a byte slice or create a substring
-				*(*string)(p) = string(s[tokens[ti].Index+1 : tokens[ti].End-1])
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNull:
 				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
-				writeNullValue(d.stackExp[si].Type, p)
+				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					// Nothing
+				case ExpectTypeSlice:
+					// Skip
+				case ExpectTypeStruct:
+					// Nothing, the struct is already zeroed
+				case ExpectTypeBool:
+					*(*bool)(p) = zeroBool
+				case ExpectTypeStr:
+					*(*string)(p) = zeroStr
+				case ExpectTypeFloat32:
+					*(*float32)(p) = zeroFloat32
+				case ExpectTypeFloat64:
+					*(*float64)(p) = zeroFloat64
+				case ExpectTypeInt:
+					*(*int)(p) = zeroInt
+				case ExpectTypeInt8:
+					*(*int8)(p) = zeroInt8
+				case ExpectTypeInt16:
+					*(*int16)(p) = zeroInt16
+				case ExpectTypeInt32:
+					*(*int32)(p) = zeroInt32
+				case ExpectTypeInt64:
+					*(*int64)(p) = zeroInt64
+				case ExpectTypeUint:
+					*(*uint)(p) = zeroUint
+				case ExpectTypeUint8:
+					*(*uint8)(p) = zeroUint8
+				case ExpectTypeUint16:
+					*(*uint16)(p) = zeroUint16
+				case ExpectTypeUint32:
+					*(*uint32)(p) = zeroUint32
+				case ExpectTypeUint64:
+					*(*uint64)(p) = zeroUint64
+				}
 				goto ON_VAL_END
 
 			case jscan.TokenTypeArray:
 				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					v, tail, err := decodeAny(s, tokens[ti:])
+					ti = len(tokens[ti:]) - len(tail)
+					if err != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					**(**interface{})(unsafe.Pointer(&p)) = v
+
 				case ExpectTypeArray:
 					if tokens[ti].Elements < 1 {
 						ti++ // Skip over closing TokenArrayEnd
@@ -789,6 +903,21 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 			case jscan.TokenTypeObject:
 				switch d.stackExp[si].Type {
+				case ExpectTypeAny:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					v, tail, err := decodeAny(s, tokens[ti:])
+					ti = len(tokens[ti:]) - len(tail)
+					if err != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					**(**interface{})(unsafe.Pointer(&p)) = v
+
 				case ExpectTypeMap:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
@@ -983,43 +1112,6 @@ var (
 	zeroFloat64 float64
 )
 
-func writeNullValue(t ExpectType, p unsafe.Pointer) {
-	switch t {
-	case ExpectTypeSlice:
-		// Skip
-	case ExpectTypeStruct:
-		// Nothing, the struct is already zeroed
-	case ExpectTypeBool:
-		*(*bool)(p) = zeroBool
-	case ExpectTypeStr:
-		*(*string)(p) = zeroStr
-	case ExpectTypeFloat32:
-		*(*float32)(p) = zeroFloat32
-	case ExpectTypeFloat64:
-		*(*float64)(p) = zeroFloat64
-	case ExpectTypeInt:
-		*(*int)(p) = zeroInt
-	case ExpectTypeInt8:
-		*(*int8)(p) = zeroInt8
-	case ExpectTypeInt16:
-		*(*int16)(p) = zeroInt16
-	case ExpectTypeInt32:
-		*(*int32)(p) = zeroInt32
-	case ExpectTypeInt64:
-		*(*int64)(p) = zeroInt64
-	case ExpectTypeUint:
-		*(*uint)(p) = zeroUint
-	case ExpectTypeUint8:
-		*(*uint8)(p) = zeroUint8
-	case ExpectTypeUint16:
-		*(*uint16)(p) = zeroUint16
-	case ExpectTypeUint32:
-		*(*uint32)(p) = zeroUint32
-	case ExpectTypeUint64:
-		*(*uint64)(p) = zeroUint64
-	}
-}
-
 // fieldFrameIndexByName returns the frame index of the field identified by name
 // or -1 if no field is found. Exact matches are prioritized over
 // case-insensitive matches.
@@ -1069,4 +1161,52 @@ func fieldFrameIndexByName[S []byte | string](fields []fieldStackFrame, name S) 
 		}
 	}
 	return -1
+}
+
+func decodeAny[S ~[]byte | ~string](
+	str S, tokens []jscan.Token[S],
+) (any, []jscan.Token[S], error) {
+	switch tokens[0].Type {
+	case jscan.TokenTypeNull:
+		return nil, tokens[1:], nil
+	case jscan.TokenTypeNumber, jscan.TokenTypeInteger:
+		f64, err := tokens[0].Float64(str)
+		if err != nil {
+			return nil, nil, err
+		}
+		return f64, tokens[1:], nil
+	case jscan.TokenTypeTrue:
+		return true, tokens[1:], nil
+	case jscan.TokenTypeFalse:
+		return false, tokens[1:], nil
+	case jscan.TokenTypeString:
+		return string(str[tokens[0].Index+1 : tokens[0].End-1]), tokens[1:], nil
+	case jscan.TokenTypeArray:
+		l := make([]any, 0, tokens[0].Elements)
+		for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeArrayEnd; {
+			var v any
+			var err error
+			if v, tokens, err = decodeAny(str, tokens); err != nil {
+				return nil, nil, err
+			}
+			l = append(l, v)
+		}
+		return l, tokens[1:], nil
+	case jscan.TokenTypeObject:
+		if tokens[0].Elements == 0 {
+			return map[string]any{}, tokens[2:], nil
+		}
+		m := make(map[string]any, tokens[0].Elements)
+		for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeObjectEnd; {
+			key := str[tokens[0].Index+1 : tokens[0].End-1]
+			var v any
+			var err error
+			if v, tokens, err = decodeAny(str, tokens[1:]); err != nil {
+				return nil, nil, err
+			}
+			m[string(key)] = v
+		}
+		return m, tokens[1:], nil
+	}
+	panic("unreachable")
 }
