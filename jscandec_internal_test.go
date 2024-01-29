@@ -401,3 +401,5 @@ func TestAppendTypeToStack(t *testing.T) {
 		})
 	}
 }
+
+func Ptr[T any](v T) *T { return &v }
