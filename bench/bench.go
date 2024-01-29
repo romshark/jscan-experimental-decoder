@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"unsafe"
 
 	"github.com/romshark/jscan/v2"
 	"github.com/tidwall/gjson"
@@ -120,15 +119,6 @@ func JscanBoolMatrix[S []byte | string](
 func JscanIntSlice[S []byte | string](
 	t *jscan.Tokenizer[S], str S,
 ) (s []int, err error) {
-	var sz S
-	atoi := func(s S) (int, error) { return strconv.Atoi(string(s)) }
-	if _, ok := any(sz).([]byte); ok {
-		atoi = func(s S) (int, error) {
-			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
-			return strconv.Atoi(su)
-		}
-	}
-
 	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
 		if tokens[0].Type != jscan.TokenTypeArray {
 			return true
@@ -143,12 +133,9 @@ func JscanIntSlice[S []byte | string](
 				)
 				return true
 			}
-			var v int
-			v, err = atoi(str[tokens[t].Index:tokens[t].End])
-			if err != nil {
+			if s[i], err = tokens[t].Int(str); err != nil {
 				return true
 			}
-			s[i] = v
 		}
 		return false
 	})
