@@ -40,6 +40,7 @@ type ExpectType int8
 
 const (
 	_ ExpectType = iota
+	ExpectTypePtr
 	ExpectTypeAny
 	ExpectTypeMap
 	ExpectTypeArray
@@ -49,13 +50,11 @@ const (
 	ExpectTypeStr
 	ExpectTypeFloat32
 	ExpectTypeFloat64
-
 	ExpectTypeInt
 	ExpectTypeInt8
 	ExpectTypeInt16
 	ExpectTypeInt32
 	ExpectTypeInt64
-
 	ExpectTypeUint
 	ExpectTypeUint8
 	ExpectTypeUint16
@@ -65,6 +64,8 @@ const (
 
 func (t ExpectType) String() string {
 	switch t {
+	case ExpectTypePtr:
+		return "*"
 	case ExpectTypeAny:
 		return "any"
 	case ExpectTypeMap:
@@ -417,6 +418,17 @@ func appendTypeToStack[S []byte | string](
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
 		})
+	case reflect.Pointer:
+		parentIndex := len(stack)
+		stack = append(stack, stackFrame[S]{
+			Type:             ExpectTypePtr,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
+		newAtIndex := len(stack)
+		stack = appendTypeToStack(stack, t.Elem())
+		stack[newAtIndex].ParentFrameIndex = parentIndex
+
 	default:
 		panic(fmt.Errorf("TODO: unsupported type: %v", t))
 	}
@@ -523,7 +535,15 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
-		for ti := 0; ti < len(tokens); ti++ {
+		for ti := 0; ti < len(tokens); {
+			if d.stackExp[si].Type == ExpectTypePtr {
+				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
+				si++
+				dp := allocate(d.stackExp[si].Size)
+				d.stackExp[si].Dest = dp
+				*(*unsafe.Pointer)(p) = dp
+				continue
+			}
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
 				p := unsafe.Pointer(
@@ -542,6 +562,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
+				ti++
 				goto ON_VAL_END
 
 			case jscan.TokenTypeInteger:
@@ -737,6 +758,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
+				ti++
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNumber:
@@ -776,6 +798,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
 					return true
 				}
+				ti++
 				goto ON_VAL_END
 
 			case jscan.TokenTypeString:
@@ -794,6 +817,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					return true
 				}
 				// This will either copy from a byte slice or create a substring
+				ti++
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNull:
@@ -834,6 +858,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				case ExpectTypeUint64:
 					*(*uint64)(p) = zeroUint64
 				}
+				ti++
 				goto ON_VAL_END
 
 			case jscan.TokenTypeArray:
@@ -843,7 +868,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
-					ti = len(tokens[ti:]) - len(tail)
 					if errDecode != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -852,14 +876,16 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						return true
 					}
 					**(**interface{})(unsafe.Pointer(&p)) = v
+					ti = len(tokens) - len(tail)
+					goto ON_VAL_END
 
 				case ExpectTypeArray:
 					if tokens[ti].Elements < 1 {
-						ti++ // Skip over closing TokenArrayEnd
+						ti += 2 // Skip over closing TokenArrayEnd
 						// Empty array, no need to allocate memory.
 						// Go will automatically allocate it together with its parent
 						// and zero it.
-						break
+						goto ON_VAL_END
 					}
 					if uintptr(tokens[ti].Elements) > d.stackExp[si].Size {
 						// Go array is too small to accommodate all values.
@@ -876,6 +902,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
+					ti++
 					si++
 					d.stackExp[si].Dest = p
 					d.stackExp[si].Offset = 0
@@ -893,6 +920,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						// Allocate empty slice
 						dp = allocate(elementSize)
 						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: 0, Cap: 0}
+						ti += 2
+						goto ON_VAL_END
 					} else {
 						dp = allocate(elems * elementSize)
 						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: elems, Cap: elems}
@@ -902,6 +931,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						d.stackExp[si].Offset = 0
 						d.stackExp[si].AdvanceBy = elementSize
 					}
+					ti++
 
 				default:
 					err = ErrorDecode{
@@ -918,7 +948,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
-					ti = len(tokens[ti:]) - len(tail)
 					if errDecode != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -927,6 +956,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						return true
 					}
 					**(**interface{})(unsafe.Pointer(&p)) = v
+					ti = len(tokens) - len(tail)
+					goto ON_VAL_END
 
 				case ExpectTypeMap:
 					p := unsafe.Pointer(
@@ -936,14 +967,15 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						d.stackExp[si].MapType, tokens[ti].Elements,
 					)
 					*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
-					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
-						ti++
+					if tokens[ti].Elements == 0 {
+						ti += 2
 						goto ON_VAL_END
 					}
+					ti++
 
 				case ExpectTypeStruct:
 					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
-						ti++
+						ti += 2
 						goto ON_VAL_END
 					}
 					p := unsafe.Pointer(
@@ -954,6 +986,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					for i := range d.stackExp[si].Fields {
 						d.stackExp[d.stackExp[si].Fields[i].FrameIndex].Dest = p
 					}
+					ti++
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -1046,19 +1080,24 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 					return true
 				}
+				ti++
 
 			case jscan.TokenTypeObjectEnd:
+				ti++
 				goto ON_VAL_END
 			case jscan.TokenTypeArrayEnd:
 				if tokens[tokens[ti].End].Elements != 0 {
 					si--
 				}
+				ti++
 				goto ON_VAL_END
 			}
 			continue
 		ON_VAL_END:
 			if siParent := d.stackExp[si].ParentFrameIndex; siParent > -1 {
 				switch d.stackExp[siParent].Type {
+				case ExpectTypePtr:
+					si--
 				case ExpectTypeArray, ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
 				case ExpectTypeMap:

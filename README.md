@@ -25,7 +25,7 @@ Roadmap:
 - [ ] JSON struct tags
     - [x] Case-insensitive key matching.
     - [ ] Option `string`
-- [ ] Pointers
+- [x] Pointers
 - [ ] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [ ] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
 - [ ] Type `json.RawMessage`

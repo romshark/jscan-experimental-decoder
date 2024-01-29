@@ -20,6 +20,14 @@ func TestAppendTypeToStack(t *testing.T) {
 		Ignored int16 `json:"-"`
 		Bazz    int   `json:"bazz"`
 	}
+	type S3 struct {
+		Any   any
+		Map   map[string]any
+		Slice []any
+	}
+
+	tpS3 := reflect.TypeOf(S3{})
+	tpEmptyIface := reflect.TypeOf(struct{ typ, data uintptr }{})
 
 	for _, td := range []struct {
 		Input       any
@@ -298,6 +306,91 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: S3{},
+			ExpectStack: []stackFrame[string]{
+				{ // S3
+					Fields: []fieldStackFrame{
+						{Name: "Any", FrameIndex: 1},
+						{Name: "Map", FrameIndex: 2},
+						{Name: "Slice", FrameIndex: 5},
+					},
+					Type:             ExpectTypeStruct,
+					Size:             reflect.TypeOf(S3{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // S3.Any
+					Type:             ExpectTypeAny,
+					Size:             tpEmptyIface.Size(),
+					ParentFrameIndex: 0,
+					Offset:           tpS3.Field(0).Offset,
+				},
+				{ // S3.Map
+					Type:             ExpectTypeMap,
+					Size:             reflect.TypeOf(map[string]any{}).Size(),
+					MapType:          reflect.TypeOf(map[string]any{}),
+					ParentFrameIndex: 0,
+					Offset:           tpS3.Field(1).Offset,
+				},
+				{ // Key frame
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 2,
+				},
+				{ // Value frame
+					Type:             ExpectTypeAny,
+					Size:             tpEmptyIface.Size(),
+					ParentFrameIndex: 2,
+				},
+				{ // S3.Slice
+					Size:             reflect.TypeOf([]any{}).Size(),
+					Type:             ExpectTypeSlice,
+					ParentFrameIndex: 0,
+					Offset:           tpS3.Field(2).Offset,
+				},
+				{ // S3.Slice
+					Size:             tpEmptyIface.Size(),
+					Type:             ExpectTypeAny,
+					ParentFrameIndex: 5,
+				},
+			},
+		},
+		{
+			Input: Ptr(int(0)),
+			ExpectStack: []stackFrame[string]{
+				{ // *
+					Type:             ExpectTypePtr,
+					Size:             reflect.TypeOf(Ptr(int(0))).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // *int
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: Ptr(Ptr(int(0))),
+			ExpectStack: []stackFrame[string]{
+				{ // *
+					Type:             ExpectTypePtr,
+					Size:             reflect.TypeOf(Ptr(Ptr(int(0)))).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // **
+					Type:             ExpectTypePtr,
+					Size:             reflect.TypeOf(Ptr(int(0))).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // **int
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 1,
+				},
+			},
+		},
+		{},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
 			actual := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))

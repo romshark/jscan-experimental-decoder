@@ -29,12 +29,17 @@ type DecoderIface[S []byte | string, T any] interface {
 	Decode(S, *T) jscandec.ErrorDecode
 }
 
-type testSetup[T any] struct{ decoder DecoderIface[string, T] }
+type testSetup[T any] struct {
+	decoderString DecoderIface[string, T]
+	decoderBytes  DecoderIface[[]byte, T]
+}
 
 func newTestSetup[T any]() testSetup[T] {
-	tokenizer := jscan.NewTokenizer[string](64, 2048*1024)
-	d := jscandec.NewDecoder[string, T](tokenizer)
-	return testSetup[T]{decoder: d}
+	tokenizerString := jscan.NewTokenizer[string](16, 1024)
+	dStr := jscandec.NewDecoder[string, T](tokenizerString)
+	tokenizerBytes := jscan.NewTokenizer[[]byte](16, 1024)
+	dBytes := jscandec.NewDecoder[[]byte, T](tokenizerBytes)
+	return testSetup[T]{decoderString: dStr, decoderBytes: dBytes}
 }
 
 // testOK makes sure that input can be decoded to T successfully,
@@ -42,22 +47,37 @@ func newTestSetup[T any]() testSetup[T] {
 // expect is optional.
 func (s testSetup[T]) testOK(t *testing.T, name, input string, expect ...T) {
 	t.Helper()
-	t.Run(name, func(t *testing.T) {
+	if len(expect) > 1 {
+		t.Fatalf("more than one (%d) expectation", len(expect))
+	}
+	check := func(t *testing.T, stdResult, jscanResult T) {
 		t.Helper()
-		if len(expect) > 1 {
-			t.Fatalf("more than one (%d) expectation", len(expect))
+		require.Equal(t, stdResult, jscanResult,
+			"deviation between encoding/json and jscan results")
+		if len(expect) > 0 {
+			require.Equal(t, expect[0], jscanResult)
 		}
+		runtime.GC() // Make sure GC is happy
+	}
+	t.Run(name+"/bytes", func(t *testing.T) {
+		t.Helper()
 		var std, actual T
 		require.NoError(t, json.Unmarshal([]byte(input), &std))
-		err := s.decoder.Decode(input, &actual)
+		err := s.decoderBytes.Decode([]byte(input), &actual)
 		if err.IsErr() {
 			t.Fatal(err.Error())
 		}
-		require.Equal(t, std, actual, "deviation between encoding/json and jscan")
-		if len(expect) > 0 {
-			require.Equal(t, expect[0], actual)
+		check(t, std, actual)
+	})
+	t.Run(name+"/string", func(t *testing.T) {
+		t.Helper()
+		var std, actual T
+		require.NoError(t, json.Unmarshal([]byte(input), &std))
+		err := s.decoderString.Decode(input, &actual)
+		if err.IsErr() {
+			t.Fatal(err.Error())
 		}
-		runtime.GC() // Make sure GC is happy
+		check(t, std, actual)
 	})
 }
 
@@ -66,6 +86,7 @@ func (s testSetup[T]) testOK(t *testing.T, name, input string, expect ...T) {
 func (s testSetup[T]) testErr(
 	t *testing.T, name, input string, expect jscandec.ErrorDecode,
 ) {
+	t.Helper()
 	s.testErrCheck(t, name, input, func(t *testing.T, err jscandec.ErrorDecode) {
 		t.Helper()
 		require.Equal(t, expect.Err, err.Err)
@@ -80,11 +101,19 @@ func (s testSetup[T]) testErrCheck(
 	check func(t *testing.T, err jscandec.ErrorDecode),
 ) {
 	t.Helper()
-	t.Run(name, func(t *testing.T) {
+	t.Run(name+"/bytes", func(t *testing.T) {
 		t.Helper()
 		var std, v T
 		require.Error(t, json.Unmarshal([]byte(input), &std), "no error in encoding/json")
-		err := s.decoder.Decode(input, &v)
+		err := s.decoderBytes.Decode([]byte(input), &v)
+		check(t, err)
+		runtime.GC() // Make sure GC is happy
+	})
+	t.Run(name+"/string", func(t *testing.T) {
+		t.Helper()
+		var std, v T
+		require.Error(t, json.Unmarshal([]byte(input), &std), "no error in encoding/json")
+		err := s.decoderString.Decode(input, &v)
 		check(t, err)
 		runtime.GC() // Make sure GC is happy
 	})
@@ -634,6 +663,103 @@ func TestDecodeStruct(t *testing.T) {
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
+
+func TestDecodeStructFields(t *testing.T) {
+	type S struct {
+		Any   any
+		Map   map[string]any
+		Slice []any
+	}
+	s := newTestSetup[S]()
+	s.testOK(t, "case_insensitive_match",
+		`{"any":42,"Map":{"foo":"bar"},"SLICE":[1,false,"x"]}`,
+		S{
+			Any:   float64(42),
+			Map:   map[string]any{"foo": "bar"},
+			Slice: []any{float64(1), false, "x"},
+		})
+	s.testOK(t, "different_order_and_types",
+		`{"map":{},"slice":[{"1":"2", "3":4},null,[]],"any":{"x":"y"}}`,
+		S{
+			Map:   map[string]any{},
+			Slice: []any{map[string]any{"1": "2", "3": float64(4)}, nil, []any{}},
+			Any:   map[string]any{"x": "y"},
+		})
+	s.testOK(t, "null_fields",
+		`{"map":null,"slice":null,"any":null}`,
+		S{})
+	s.testOK(t, "partial_one_field",
+		`{"slice":[{"x":false,"y":42},{"Имя":"foo"},{"x":{}}]}`,
+		S{Slice: []any{
+			map[string]any{"x": false, "y": float64(42)},
+			map[string]any{"Имя": "foo"},
+			map[string]any{"x": map[string]any{}},
+		}})
+
+	s.testOK(t, "null", `null`, S{})
+	s.testOK(t, "empty", `{}`, S{})
+	s.testOK(t, "name_mismatch", `{"faz":42,"baz":"bazz"}`, S{})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodePointerInt(t *testing.T) {
+	s := newTestSetup[*int]()
+	s.testOK(t, "valid", `42`, Ptr(int(42)))
+
+	s.testErr(t, "float", `1.1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodePointerStruct(t *testing.T) {
+	type S struct {
+		Foo string `json:"foo"`
+		Bar any    `json:"bar"`
+	}
+	s := newTestSetup[*S]()
+	s.testOK(t, "valid", `{"foo":"™","bar":[1,true]}`, &S{
+		Foo: "™",
+		Bar: []any{float64(1), true},
+	})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodePointerAny(t *testing.T) {
+	s := newTestSetup[*any]()
+	s.testOK(t, "int", `[1]`, Ptr(any([]any{float64(1)})))
+	s.testOK(t, "string", `"text"`, Ptr(any("text")))
+	s.testOK(t, "array_int", `[1]`, Ptr(any([]any{float64(1)})))
+	s.testOK(t, "array_int", `{"foo":1}`, Ptr(any(map[string]any{"foo": float64(1)})))
+}
+
+func TestDecodePointer3DInt(t *testing.T) {
+	s := newTestSetup[***int]()
+	s.testOK(t, "valid", `42`, Ptr(Ptr(Ptr(int(42)))))
+
+	s.testErr(t, "float", `1.1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func Ptr[T any](v T) *T { return &v }
 
 func TestDecodeStructSlice(t *testing.T) {
 	type S struct {
