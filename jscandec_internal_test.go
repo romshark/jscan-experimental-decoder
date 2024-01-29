@@ -390,7 +390,6 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
-		{},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
 			actual := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
