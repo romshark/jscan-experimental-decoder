@@ -26,6 +26,6 @@ Roadmap:
     - [x] Case-insensitive key matching.
     - [ ] Option `string`
 - [x] Pointers
-- [ ] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
+- [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [ ] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
 - [ ] Type `json.RawMessage`

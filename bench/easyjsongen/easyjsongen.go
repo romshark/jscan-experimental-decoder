@@ -1,4 +1,6 @@
-package bench
+package easyjsongen
+
+//go:generate easyjson -all easyjsongen.go
 
 type Any struct {
 	Data any `json:"data"`

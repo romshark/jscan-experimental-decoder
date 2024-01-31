@@ -7,6 +7,7 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	"github.com/romshark/jscan-experimental-decoder/bench/easyjsongen"
 	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
@@ -46,7 +47,7 @@ func TestImplementationsMapStringString(t *testing.T) {
 		// We need to wrap the original input string into an object
 		// since easyjson only supports struct unmarshalers
 		in := []byte(`{"data":` + string(in) + `}`)
-		v := &bench.MapStringString{}
+		v := &easyjsongen.MapStringString{}
 		require.NoError(t, easyjson.Unmarshal(in, v))
 		require.Equal(t, expect(), v.Data)
 	})
@@ -136,7 +137,7 @@ func BenchmarkDecodeMapStringString(b *testing.B) {
 		in := []byte(`{"data":` + string(in) + `}`)
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
-			var v bench.MapStringString
+			var v easyjsongen.MapStringString
 			if err := easyjson.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}

@@ -7,6 +7,8 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	"github.com/romshark/jscan-experimental-decoder/bench/easyjsongen"
+	"github.com/romshark/jscan-experimental-decoder/bench/ffjsongen"
 	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
@@ -51,15 +53,15 @@ func TestImplementationsStruct3(t *testing.T) {
 	})
 
 	t.Run("easyjson", func(t *testing.T) {
-		var v bench.Struct3
+		var v easyjsongen.Struct3
 		require.NoError(t, easyjson.Unmarshal([]byte(in), &v))
-		require.Equal(t, expect(), v)
+		require.Equal(t, expect(), bench.Struct3(v))
 	})
 
 	t.Run("ffjson", func(t *testing.T) {
-		var v bench.Struct3
+		var v ffjsongen.Struct3
 		require.NoError(t, ffjson.Unmarshal([]byte(in), &v))
-		require.Equal(t, expect(), v)
+		require.Equal(t, expect(), bench.Struct3(v))
 	})
 
 	t.Run("gjson", func(t *testing.T) {
@@ -147,7 +149,7 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("easyjson", func(b *testing.B) {
-		var v bench.Struct3
+		var v easyjsongen.Struct3
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			if err := easyjson.Unmarshal(in, &v); err != nil {
@@ -157,7 +159,7 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("ffjson", func(b *testing.B) {
-		var v bench.Struct3
+		var v ffjsongen.Struct3
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			if err := ffjson.Unmarshal(in, &v); err != nil {

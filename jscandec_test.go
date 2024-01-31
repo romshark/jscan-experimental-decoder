@@ -3,6 +3,7 @@ package jscandec_test
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"math"
 	"runtime"
 	"strconv"
@@ -942,6 +943,48 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 5})
 }
 
+func TestDecodeJSONUnmarshaler(t *testing.T) {
+	s := newTestSetup[unmarshalerImpl]()
+	s.testOK(t, "integer", `123`, unmarshalerImpl{Value: `123`})
+	s.testOK(t, "float", `3.14`, unmarshalerImpl{Value: `3.14`})
+	s.testOK(t, "string", `"okay"`, unmarshalerImpl{Value: `"okay"`})
+	s.testOK(t, "true", `true`, unmarshalerImpl{Value: `true`})
+	s.testOK(t, "false", `false`, unmarshalerImpl{Value: `false`})
+	s.testOK(t, "null", `null`, unmarshalerImpl{Value: `null`})
+	s.testOK(t, "array_empty", `[]`, unmarshalerImpl{Value: `[]`})
+	s.testOK(t, "array", `[1,"okay",true,{ }]`,
+		unmarshalerImpl{Value: `[1,"okay",true,{ }]`})
+	s.testOK(t, "object_empty", `{}`, unmarshalerImpl{Value: `{}`})
+	s.testOK(t, "object_empty", `{"foo":{"bar":"baz"}}`,
+		unmarshalerImpl{Value: `{"foo":{"bar":"baz"}}`})
+}
+
+func TestDecodeJSONUnmarshalerField(t *testing.T) {
+	type S struct {
+		Name        string          `json:"name"`
+		Unmarshaler unmarshalerImpl `json:"unmar"`
+		Tail        []int           `json:"tail"`
+	}
+	s := newTestSetup[S]()
+	s.testOK(t, "integer", `{"name":"a","unmar":42,"tail":[1,2]}`,
+		S{Name: "a", Unmarshaler: unmarshalerImpl{Value: `42`}, Tail: []int{1, 2}})
+	s.testOK(t, "string", `{"name":"b","unmar":"text","tail":[1,2]}`,
+		S{Name: "b", Unmarshaler: unmarshalerImpl{Value: `"text"`}, Tail: []int{1, 2}})
+	s.testOK(t, "array", `{"name":"c","unmar":[1,2, 3],"tail":[1,2]}`,
+		S{Name: "c", Unmarshaler: unmarshalerImpl{Value: `[1,2, 3]`}, Tail: []int{1, 2}})
+	s.testOK(t, "object", `{"name":"d","unmar":{"foo":["bar", null]},"tail":[1,2]}`,
+		S{Name: "d", Unmarshaler: unmarshalerImpl{
+			Value: `{"foo":["bar", null]}`,
+		}, Tail: []int{1, 2}})
+}
+
+func TestDecodeJSONUnmarshalerErr(t *testing.T) {
+	s := newTestSetup[unmarshalerImplErr]()
+	s.testErrCheck(t, "integer", `123`, func(t *testing.T, err jscandec.ErrorDecode) {
+		require.Equal(t, errUnmarshalerImplErr, err.Err)
+	})
+}
+
 func BenchmarkSmall(b *testing.B) {
 	in := []byte(`[[true],[false,false,false,false],[],[],[true]]`) // 18 tokens
 
@@ -970,3 +1013,20 @@ func require64bitSystem(t *testing.T) {
 	require.Equal(t, uintptr(8), unsafe.Sizeof(int(0)),
 		"this test must run on a 64-bit system")
 }
+
+// unmarshalerImpl implements encoding/json.Unmarshaler.
+type unmarshalerImpl struct{ Value string }
+
+func (impl *unmarshalerImpl) UnmarshalJSON(data []byte) error {
+	impl.Value = string(data)
+	return nil
+}
+
+// unmarshalerImplErr implements encoding/json.Unmarshaler and always returns an error.
+type unmarshalerImplErr struct{ Value string }
+
+func (impl *unmarshalerImplErr) UnmarshalJSON(data []byte) error {
+	return errUnmarshalerImplErr
+}
+
+var errUnmarshalerImplErr = errors.New("unmarshalerImplErr error")

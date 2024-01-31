@@ -2,6 +2,7 @@ package jscandec
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"testing"
@@ -25,8 +26,20 @@ func TestAppendTypeToStack(t *testing.T) {
 		Map   map[string]any
 		Slice []any
 	}
+	type S4 struct {
+		Name        string                  `json:"name"`
+		Unmarshaler testImplJSONUnmarshaler `json:"unmar"`
+		Tail        []int                   `json:"tail"`
+	}
+	type S5 struct {
+		Name        string                   `json:"name"`
+		Unmarshaler *testImplJSONUnmarshaler `json:"unmar"`
+		Tail        []int                    `json:"tail"`
+	}
 
 	tpS3 := reflect.TypeOf(S3{})
+	tpS4 := reflect.TypeOf(S4{})
+	tpS5 := reflect.TypeOf(S5{})
 	tpEmptyIface := reflect.TypeOf(struct{ typ, data uintptr }{})
 
 	for _, td := range []struct {
@@ -219,7 +232,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[string]string{},
 			ExpectStack: []stackFrame[string]{
 				{
-					MapType:          reflect.TypeOf(map[string]string{}),
+					RType:            reflect.TypeOf(map[string]string{}),
 					Size:             reflect.TypeOf(map[string]string{}).Size(),
 					Type:             ExpectTypeMap,
 					ParentFrameIndex: -1,
@@ -240,7 +253,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[int]S1{},
 			ExpectStack: []stackFrame[string]{
 				{
-					MapType:          reflect.TypeOf(map[int]S1{}),
+					RType:            reflect.TypeOf(map[int]S1{}),
 					Size:             reflect.TypeOf(map[int]S1{}).Size(),
 					Type:             ExpectTypeMap,
 					ParentFrameIndex: -1,
@@ -276,8 +289,8 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[int]map[string]float32{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:    ExpectTypeMap,
-					MapType: reflect.TypeOf(map[int]map[string]float32{}),
+					Type:  ExpectTypeMap,
+					RType: reflect.TypeOf(map[int]map[string]float32{}),
 					Size: reflect.TypeOf(
 						map[int]map[string]float32{},
 					).Size(),
@@ -290,7 +303,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeMap,
-					MapType:          reflect.TypeOf(map[string]float32{}),
+					RType:            reflect.TypeOf(map[string]float32{}),
 					Size:             reflect.TypeOf(map[string]float32{}).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -328,7 +341,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				{ // S3.Map
 					Type:             ExpectTypeMap,
 					Size:             reflect.TypeOf(map[string]any{}).Size(),
-					MapType:          reflect.TypeOf(map[string]any{}),
+					RType:            reflect.TypeOf(map[string]any{}),
 					ParentFrameIndex: 0,
 					Offset:           tpS3.Field(1).Offset,
 				},
@@ -390,6 +403,137 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: testImplJSONUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{ // *
+					Type:             ExpectTypeJSONUnmarshaler,
+					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
+					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: &testImplJSONUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{ // *
+					Type:             ExpectTypeJSONUnmarshaler,
+					RType:            reflect.TypeOf(&testImplJSONUnmarshaler{}),
+					Size:             reflect.TypeOf(&testImplJSONUnmarshaler{}).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: []testImplJSONUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]any{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeJSONUnmarshaler,
+					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
+					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: testImplJSONUnmarshalerWithUnmarshalerField{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:  ExpectTypeJSONUnmarshaler,
+					RType: reflect.TypeOf(testImplJSONUnmarshalerWithUnmarshalerField{}),
+					Size: reflect.TypeOf(
+						testImplJSONUnmarshalerWithUnmarshalerField{},
+					).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: S4{},
+			ExpectStack: []stackFrame[string]{
+				{ // S4
+					Fields: []fieldStackFrame{
+						{Name: "name", FrameIndex: 1},
+						{Name: "unmar", FrameIndex: 2},
+						{Name: "tail", FrameIndex: 3},
+					},
+					Type:             ExpectTypeStruct,
+					Size:             reflect.TypeOf(S4{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // S4.Name
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 0,
+					Offset:           tpS4.Field(0).Offset,
+				},
+				{ // S4.Unmarshaler
+					Type:             ExpectTypeJSONUnmarshaler,
+					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
+					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
+					ParentFrameIndex: 0,
+					Offset:           tpS4.Field(1).Offset,
+				},
+				{ // S4.Tail
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]int{}).Size(),
+					ParentFrameIndex: 0,
+					Offset:           tpS4.Field(2).Offset,
+				},
+				{ // S4.Tail[]
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 3,
+					Offset:           0,
+				},
+			},
+		},
+		{
+			Input: S5{},
+			ExpectStack: []stackFrame[string]{
+				{ // S5
+					Fields: []fieldStackFrame{
+						{Name: "name", FrameIndex: 1},
+						{Name: "unmar", FrameIndex: 2},
+						{Name: "tail", FrameIndex: 3},
+					},
+					Type:             ExpectTypeStruct,
+					Size:             reflect.TypeOf(S5{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // S5.Name
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 0,
+					Offset:           tpS5.Field(0).Offset,
+				},
+				{ // S5.Unmarshaler
+					Type:             ExpectTypeJSONUnmarshaler,
+					Size:             reflect.TypeOf(&testImplJSONUnmarshaler{}).Size(),
+					RType:            reflect.TypeOf(&testImplJSONUnmarshaler{}),
+					ParentFrameIndex: 0,
+					Offset:           tpS5.Field(1).Offset,
+				},
+				{ // S5.Tail
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]int{}).Size(),
+					ParentFrameIndex: 0,
+					Offset:           tpS5.Field(2).Offset,
+				},
+				{ // S5.Tail[]
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 3,
+					Offset:           0,
+				},
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
 			actual := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
@@ -402,4 +546,62 @@ func TestAppendTypeToStack(t *testing.T) {
 	}
 }
 
+// testImplJSONUnmarshaler implements encoding/json.Unmarshaler for testing purposes.
+type testImplJSONUnmarshaler struct{ LenBytes int }
+
+func (t *testImplJSONUnmarshaler) UnmarshalJSON(data []byte) error {
+	t.LenBytes = len(data)
+	return nil
+}
+
+var _ json.Unmarshaler = &testImplJSONUnmarshaler{}
+
+// testImplJSONUnmarshalerWithUnmarshalerField implements encoding/json.Unmarshaler
+// but also features a field that implements said interface for testing purposes.
+type testImplJSONUnmarshalerWithUnmarshalerField struct{ Inner json.Unmarshaler }
+
+func (t *testImplJSONUnmarshalerWithUnmarshalerField) UnmarshalJSON(data []byte) error {
+	return t.Inner.UnmarshalJSON(data)
+}
+
+var _ json.Unmarshaler = &testImplJSONUnmarshalerWithUnmarshalerField{}
+
 func Ptr[T any](v T) *T { return &v }
+
+func TestDetermineJSONUnmarshalerSupport(t *testing.T) {
+	type testStruct struct {
+		Name   string   `json:"name"`
+		Number int      `json:"number"`
+		Tags   []string `json:"tags"`
+	}
+
+	for _, td := range []struct {
+		Input  reflect.Type
+		Expect jsonUnmarshalerSupport
+	}{
+		{
+			Input:  reflect.TypeOf(int(0)),
+			Expect: jsonUnmarshalerSupportNone,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(int(0))),
+			Expect: jsonUnmarshalerSupportNone,
+		},
+		{
+			Input:  reflect.TypeOf(json.RawMessage("")),
+			Expect: jsonUnmarshalerSupportPtr,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(json.RawMessage(""))),
+			Expect: jsonUnmarshalerSupportCopy,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(testStruct{})),
+			Expect: jsonUnmarshalerSupportNone,
+		},
+	} {
+		t.Run(td.Input.String(), func(t *testing.T) {
+			require.Equal(t, td.Expect, determineJSONUnmarshalerSupport(td.Input))
+		})
+	}
+}

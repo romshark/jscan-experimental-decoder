@@ -7,6 +7,7 @@ import (
 
 	jscandec "github.com/romshark/jscan-experimental-decoder"
 	"github.com/romshark/jscan-experimental-decoder/bench"
+	"github.com/romshark/jscan-experimental-decoder/bench/easyjsongen"
 
 	jsonv2 "github.com/go-json-experiment/json"
 	goccy "github.com/goccy/go-json"
@@ -43,7 +44,7 @@ func TestImplementationsAnyInt(t *testing.T) {
 		// We need to wrap the original input string into an object
 		// since easyjson only supports struct unmarshalers
 		in := []byte(`{"data":` + string(in) + `}`)
-		v := &bench.Any{}
+		v := &easyjsongen.Any{}
 		require.NoError(t, easyjson.Unmarshal(in, v))
 		require.Equal(t, expect, v.Data)
 	})
@@ -133,7 +134,7 @@ func BenchmarkAnyInt(b *testing.B) {
 		in := []byte(`{"data":` + string(in) + `}`)
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
-			var v bench.Any
+			var v easyjsongen.Any
 			if err := easyjson.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}

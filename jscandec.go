@@ -1,6 +1,7 @@
 package jscandec
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -40,6 +41,8 @@ type ExpectType int8
 
 const (
 	_ ExpectType = iota
+
+	ExpectTypeJSONUnmarshaler
 	ExpectTypePtr
 	ExpectTypeAny
 	ExpectTypeMap
@@ -64,6 +67,8 @@ const (
 
 func (t ExpectType) String() string {
 	switch t {
+	case ExpectTypeJSONUnmarshaler:
+		return "interface{UnmarshalJSON([]byte)error}"
 	case ExpectTypePtr:
 		return "*"
 	case ExpectTypeAny:
@@ -123,8 +128,8 @@ type stackFrame[S []byte | string] struct {
 	// For every other type Fields is always nil.
 	Fields []fieldStackFrame
 
-	// MapType is relevant to map frames only.
-	MapType reflect.Type
+	// RType is relevant to map and JSONUnmarshaler frames only.
+	RType reflect.Type
 
 	// LastMapKey is relevant to map frames only.
 	LastMapKey S
@@ -223,6 +228,14 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: len(stack) - 1,
 		})
 	}
+	if s := determineJSONUnmarshalerSupport(t); s > 0 {
+		return append(stack, stackFrame[S]{
+			Type:             ExpectTypeJSONUnmarshaler,
+			RType:            t,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
+	}
 	switch t.Kind() {
 	case reflect.Interface:
 		if t.NumMethod() != 0 {
@@ -268,7 +281,7 @@ func appendTypeToStack[S []byte | string](
 			Size:             t.Size(),
 			Type:             ExpectTypeMap,
 			ParentFrameIndex: len(stack) - 1,
-			MapType:          t,
+			RType:            t,
 		})
 		{
 			newAtIndex := len(stack)
@@ -435,6 +448,31 @@ func appendTypeToStack[S []byte | string](
 	return stack
 }
 
+var tpJSONUnmarshaler = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+
+type jsonUnmarshalerSupport uint8
+
+const (
+	jsonUnmarshalerSupportNone jsonUnmarshalerSupport = iota
+	jsonUnmarshalerSupportCopy
+	jsonUnmarshalerSupportPtr
+)
+
+// determineJSONUnmarshalerSupport returns:
+//
+//   - jsonUnmarshalerSupportNone if t doesn't implement encoding/json.Unmarshaler
+//   - jsonUnmarshalerSupportCopy if t implements encoding/json.Unmarshaler
+//   - jsonUnmarshalerSupportPtr if pointer to t implements encoding/json.Unmarshaler.
+func determineJSONUnmarshalerSupport(t reflect.Type) jsonUnmarshalerSupport {
+	if t.AssignableTo(tpJSONUnmarshaler) {
+		return jsonUnmarshalerSupportCopy
+	}
+	if t.Kind() != reflect.Ptr && reflect.PointerTo(t).AssignableTo(tpJSONUnmarshaler) {
+		return jsonUnmarshalerSupportPtr
+	}
+	return jsonUnmarshalerSupportNone
+}
+
 // Decode unmarshals the JSON contents of s into t.
 // When S is string the decoder will not copy string values and will instead refer
 // to the source string instead since Go strings are guaranteed to be immutable.
@@ -536,8 +574,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		for ti := 0; ti < len(tokens); {
+			p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 			if d.stackExp[si].Type == ExpectTypePtr {
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				si++
 				dp := allocate(d.stackExp[si].Size)
 				d.stackExp[si].Dest = dp
@@ -546,10 +584,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			}
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
-				p := unsafe.Pointer(
-					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-				)
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
 					v := tokens[ti].Type == jscan.TokenTypeTrue
 					**(**interface{})(unsafe.Pointer(&p)) = v
@@ -566,8 +603,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeInteger:
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
@@ -762,8 +800,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNumber:
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
@@ -802,9 +841,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeString:
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
 					**(**interface{})(unsafe.Pointer(&p)) = string(tv)
 				case ExpectTypeStr:
@@ -821,8 +861,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNull:
-				p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
 					// Nothing
 				case ExpectTypeSlice:
@@ -863,10 +904,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 			case jscan.TokenTypeArray:
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
 						err = ErrorDecode{
@@ -898,10 +938,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 					elementSize := d.stackExp[si+1].Size
 
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
-
 					ti++
 					si++
 					d.stackExp[si].Dest = p
@@ -910,10 +946,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 				case ExpectTypeSlice:
 					elementSize := d.stackExp[si+1].Size
-
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 
 					var dp unsafe.Pointer
 					if elems := uintptr(tokens[ti].Elements); elems == 0 {
@@ -943,10 +975,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 			case jscan.TokenTypeObject:
 				switch d.stackExp[si].Type {
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_UNMARSHALER
 				case ExpectTypeAny:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
 						err = ErrorDecode{
@@ -960,11 +991,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					goto ON_VAL_END
 
 				case ExpectTypeMap:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					d.stackExp[si].MapValue = reflect.MakeMapWithSize(
-						d.stackExp[si].MapType, tokens[ti].Elements,
+						d.stackExp[si].RType, tokens[ti].Elements,
 					)
 					*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
 					if tokens[ti].Elements == 0 {
@@ -978,9 +1006,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						ti += 2
 						goto ON_VAL_END
 					}
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					// Point all fields to the struct, the offsets are already
 					// set statically during decoder init time.
 					for i := range d.stackExp[si].Fields {
@@ -1093,6 +1118,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 			}
 			continue
+
 		ON_VAL_END:
 			if siParent := d.stackExp[si].ParentFrameIndex; siParent > -1 {
 				switch d.stackExp[siParent].Type {
@@ -1106,7 +1132,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					d.stackExp[siParent].MapValue.SetMapIndex(
 						reflect.ValueOf(string(key)),
 						reflect.NewAt(
-							d.stackExp[siParent].MapType.Elem(), d.stackExp[si].Dest,
+							d.stackExp[siParent].RType.Elem(), d.stackExp[si].Dest,
 						).Elem(),
 					)
 					fallthrough
@@ -1120,6 +1146,32 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						return true
 					}
 				}
+			}
+			continue
+
+		ON_UNMARSHALER:
+			{
+				var raw S
+				tkIndex := tokens[ti].Index
+				switch tokens[ti].Type {
+				case jscan.TokenTypeObject, jscan.TokenTypeArray:
+					// Composite value
+					raw = s[tokens[ti].Index : tokens[tokens[ti].End].Index+1]
+					ti = tokens[ti].End + 1
+				default:
+					// Non-composite value
+					raw = s[tokens[ti].Index:tokens[ti].End]
+					ti++
+				}
+				u := reflect.NewAt(d.stackExp[si].RType, p).Interface().(json.Unmarshaler)
+				if errUnmarshal := u.UnmarshalJSON([]byte(raw)); errUnmarshal != nil {
+					err = ErrorDecode{
+						Err:   errUnmarshal,
+						Index: tkIndex,
+					}
+					return true
+				}
+				goto ON_VAL_END
 			}
 		}
 		return false

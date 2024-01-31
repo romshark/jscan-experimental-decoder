@@ -1,4 +1,6 @@
-package bench
+package ffjsongen
+
+//go:generate ffjson $GOFILE
 
 type Any struct {
 	Data any `json:"data"`
