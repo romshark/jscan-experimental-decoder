@@ -873,6 +873,253 @@ func TestDecodeMapStringToString(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeMapIntToString(t *testing.T) {
+	type M map[int]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "-123456789":123456789}`,
+		M{0: 0, 42: 42, -123456789: 123456789})
+
+	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_lo", `{"-9223372036854775809":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapInt8ToString(t *testing.T) {
+	type M map[int8]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "min_and_max", `{"0":0, "-128":-128, "127":127}`,
+		M{0: 0, -128: -128, 127: 127})
+
+	s.testErr(t, "overflow_hi", `{"128":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_lo", `{"-129":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapInt16ToString(t *testing.T) {
+	type M map[int16]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "min_and_max", `{"0":0, "-32768":-32768, "32767":32767}`,
+		M{0: 0, -32768: -32768, 32767: 32767})
+
+	s.testErr(t, "overflow_hi", `{"32768":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_lo", `{"-32769":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapInt32ToString(t *testing.T) {
+	type M map[int32]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "min_and_max", `{"0":0,
+		"-2147483648":-2147483648, "2147483647":2147483647}`,
+		M{0: 0, -2147483648: -2147483648, 2147483647: 2147483647})
+
+	s.testErr(t, "overflow_hi", `{"2147483648":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_lo", `{"-2147483649":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapInt64ToString(t *testing.T) {
+	type M map[int64]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "min_and_max", `{"0":0,
+		"-9223372036854775808":-9223372036854775808,
+		"9223372036854775807":9223372036854775807}`,
+		M{
+			0:                    0,
+			-9223372036854775808: -9223372036854775808,
+			9223372036854775807:  9223372036854775807,
+		})
+
+	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_lo", `{"-9223372036854775809":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapUintToString(t *testing.T) {
+	type M map[uint]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
+		M{0: 0, 42: 42, 18446744073709551615: 1})
+
+	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "negative", `{"-1":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapUint8ToString(t *testing.T) {
+	type M map[uint8]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "255":1}`,
+		M{0: 0, 42: 42, 255: 1})
+
+	s.testErr(t, "overflow", `{"256":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "negative", `{"-1":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapUint16ToString(t *testing.T) {
+	type M map[uint16]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "65535":1}`,
+		M{0: 0, 42: 42, 65535: 1})
+
+	s.testErr(t, "overflow", `{"65536":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "negative", `{"-1":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapUint32ToString(t *testing.T) {
+	type M map[uint32]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "4294967295":1}`,
+		M{0: 0, 42: 42, 4294967295: 1})
+
+	s.testErr(t, "overflow", `{"4294967296":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "negative", `{"-1":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeMapUint64ToString(t *testing.T) {
+	type M map[uint64]int
+	s := newTestSetup[M]()
+	s.testOK(t, "empty", `{}`, M{})
+	s.testOK(t, "null", `null`, M(nil))
+	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
+		M{0: 0, 42: 42, 18446744073709551615: 1})
+
+	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "negative", `{"-1":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "float", `{"3.14":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "exponent", `{"3e2":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeMapStringToMapStringToString(t *testing.T) {
 	type M2 map[string]string
 	type M map[string]M2

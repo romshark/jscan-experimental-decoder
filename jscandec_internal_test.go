@@ -343,6 +343,195 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
+			Input: map[int8]int8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[int8]int8{}),
+					Size:             reflect.TypeOf(map[int8]int8{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeInt8,
+					Size:             reflect.TypeOf(int8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeInt8,
+					Size:             reflect.TypeOf(int8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[int16]int16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[int16]int16{}),
+					Size:             reflect.TypeOf(map[int16]int16{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeInt16,
+					Size:             reflect.TypeOf(int16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeInt16,
+					Size:             reflect.TypeOf(int16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[int32]int32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[int32]int32{}),
+					Size:             reflect.TypeOf(map[int32]int32{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeInt32,
+					Size:             reflect.TypeOf(int32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeInt32,
+					Size:             reflect.TypeOf(int32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[int64]int64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[int64]int64{}),
+					Size:             reflect.TypeOf(map[int64]int64{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeInt64,
+					Size:             reflect.TypeOf(int64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeInt64,
+					Size:             reflect.TypeOf(int64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[uint]uint{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[uint]uint{}),
+					Size:             reflect.TypeOf(map[uint]uint{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeUint,
+					Size:             reflect.TypeOf(uint(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeUint,
+					Size:             reflect.TypeOf(uint(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[uint8]uint8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[uint8]uint8{}),
+					Size:             reflect.TypeOf(map[uint8]uint8{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeUint8,
+					Size:             reflect.TypeOf(uint8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeUint8,
+					Size:             reflect.TypeOf(uint8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[uint16]uint16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[uint16]uint16{}),
+					Size:             reflect.TypeOf(map[uint16]uint16{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeUint16,
+					Size:             reflect.TypeOf(uint16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeUint16,
+					Size:             reflect.TypeOf(uint16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[uint32]uint32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[uint32]uint32{}),
+					Size:             reflect.TypeOf(map[uint32]uint32{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeUint32,
+					Size:             reflect.TypeOf(uint32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeUint32,
+					Size:             reflect.TypeOf(uint32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: map[uint64]uint64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeMap,
+					RType:            reflect.TypeOf(map[uint64]uint64{}),
+					Size:             reflect.TypeOf(map[uint64]uint64{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					Type:             ExpectTypeUint64,
+					Size:             reflect.TypeOf(uint64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeUint64,
+					Size:             reflect.TypeOf(uint64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
 			Input: S3{},
 			ExpectStack: []stackFrame[string]{
 				{ // S3

@@ -116,35 +116,45 @@ var tests = []test{
 	}(),
 }
 
+func runTestValid[S ~[]byte | ~string, O ~[]byte | ~string](
+	t *testing.T, name string, input S, expect O,
+) {
+	t.Run(name, func(t *testing.T) {
+		actual := unescape.Valid[S, O](input)
+		runtime.GC() // Make sure the GC is happy.
+		require.Equal(t, string(expect), string(actual))
+		var std string
+		err := json.Unmarshal([]byte(`"`+string(input)+`"`), &std)
+		require.NoError(t, err)
+		require.Equal(t, string(expect), std, "deviation between strconv and jscan")
+
+		if string(input) == `\/` {
+			return // Escaped solidus is not supported by strconv.Unquote
+		}
+		strconvResult, err := strconv.Unquote(`"` + string(input) + `"`)
+		require.NoError(t, err)
+		require.Equal(t, string(expect), strconvResult)
+	})
+}
+
 func TestValid(t *testing.T) {
+	type CustomString string
 	for _, td := range tests {
-		t.Run(td.Name+"/string", func(t *testing.T) {
-			actual := unescape.Valid(td.Input)
-			runtime.GC() // Make sure the GC is happy.
-			require.Equal(t, td.Expect, actual)
-			var std string
-			err := json.Unmarshal([]byte(`"`+td.Input+`"`), &std)
-			require.NoError(t, err)
-			require.Equal(t, td.Expect, std, "deviation between strconv and jscan")
-
-			if td.Input == `\/` {
-				return // Escaped solidus is not supported by strconv.Unquote
-			}
-			strconvResult, err := strconv.Unquote(`"` + td.Input + `"`)
-			require.NoError(t, err)
-			require.Equal(t, td.Expect, strconvResult)
-		})
-
-		t.Run(td.Name+"/bytes", func(t *testing.T) {
-			input := []byte(td.Input)
-			actual := unescape.Valid(input)
-			runtime.GC() // Make sure the GC is happy.
-			require.Equal(t, td.Expect, actual)
-			var std string
-			err := json.Unmarshal([]byte(`"`+td.Input+`"`), &std)
-			require.NoError(t, err)
-			require.Equal(t, td.Expect, std, "deviation between strconv and jscan")
-		})
+		runTestValid[string, string](
+			t, td.Name+"/string2string", td.Input, td.Expect,
+		)
+		runTestValid[string, []byte](
+			t, td.Name+"/string2bytes", td.Input, []byte(td.Expect),
+		)
+		runTestValid[[]byte, []byte](
+			t, td.Name+"/bytes2bytes", []byte(td.Input), []byte(td.Expect),
+		)
+		runTestValid[[]byte, string](
+			t, td.Name+"/bytes2string", []byte(td.Input), td.Expect,
+		)
+		runTestValid[CustomString, CustomString](
+			t, td.Name+"/bytes2string", CustomString(td.Input), CustomString(td.Expect),
+		)
 	}
 }
 
@@ -155,7 +165,7 @@ func TestValidErrRune(t *testing.T) {
 		{Name: "FFFF", Input: `\uFFFF`, Expect: "￿"},
 	} {
 		t.Run(td.Name, func(t *testing.T) {
-			unescaped := unescape.Valid(td.Input)
+			unescaped := unescape.Valid[string, string](td.Input)
 			require.Equal(t, td.Expect, unescaped)
 
 			strconvResult, err := strconv.Unquote(td.Input)
@@ -193,7 +203,7 @@ func BenchmarkValid(b *testing.B) {
 
 			b.Run("jscan", func(b *testing.B) {
 				for n := 0; n < b.N; n++ {
-					result = unescape.Valid(td.Input)
+					result = unescape.Valid[string, string](td.Input)
 				}
 			})
 		})

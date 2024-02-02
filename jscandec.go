@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/romshark/jscan-experimental-decoder/internal/atoi"
+	"github.com/romshark/jscan-experimental-decoder/internal/jsonnum"
 	"github.com/romshark/jscan-experimental-decoder/internal/unescape"
 
 	"github.com/romshark/jscan/v2"
@@ -137,7 +138,7 @@ type stackFrame[S []byte | string] struct {
 	RType reflect.Type
 
 	// LastMapKey is relevant to map frames only.
-	LastMapKey S
+	LastMapKey any
 
 	// MapValue is relevant to map frames only.
 	// MapValue is set at runtime and must be reset on every call to Decode
@@ -520,44 +521,40 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 		return ErrorDecode{Err: ErrNilDest}
 	}
 
-	var fnA2I func(s S, dest unsafe.Pointer) error
-	var fnA2UI func(s S, dest unsafe.Pointer) error
+	var fnA2I func(s S) (int, error)
+	var fnA2UI func(s S) (uint, error)
 
 	if unsafe.Sizeof(int(0)) == 8 {
 		// 64-bit system
-		fnA2I = func(s S, dest unsafe.Pointer) error {
+		fnA2I = func(s S) (int, error) {
 			i, overflow := atoi.I64(s)
 			if overflow {
-				return ErrIntegerOverflow
+				return 0, ErrIntegerOverflow
 			}
-			*(*int)(dest) = int(i)
-			return nil
+			return int(i), nil
 		}
-		fnA2UI = func(s S, dest unsafe.Pointer) error {
+		fnA2UI = func(s S) (uint, error) {
 			i, overflow := atoi.U64(s)
 			if overflow {
-				return ErrIntegerOverflow
+				return 0, ErrIntegerOverflow
 			}
-			*(*int)(dest) = int(i)
-			return nil
+			return uint(i), nil
 		}
 	} else {
 		// 32-bit system
-		fnA2I = func(s S, dest unsafe.Pointer) error {
+		fnA2I = func(s S) (int, error) {
 			i, overflow := atoi.I32(s)
 			if overflow {
-				return ErrIntegerOverflow
+				return 0, ErrIntegerOverflow
 			}
-			*(*int)(dest) = int(i)
-			return nil
+			return int(i), nil
 		}
-		fnA2UI = func(s S, dest unsafe.Pointer) error {
+		fnA2UI = func(s S) (uint, error) {
 			i, overflow := atoi.U32(s)
 			if overflow {
-				return ErrIntegerOverflow
+				return 0, ErrIntegerOverflow
 			}
-			*(*int)(dest) = int(i)
-			return nil
+			return uint(i), nil
 		}
 	}
 
@@ -672,25 +669,29 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						}
 						return true
 					}
-					p := dest()
-					if e := fnA2UI(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
+					if i, e := fnA2UI(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid unsigned integer
 						err = ErrorDecode{
 							Err:   e,
 							Index: tokens[ti].Index,
 						}
 						return true
+					} else {
+						p := dest()
+						*(*uint)(p) = i
 					}
 
 				case ExpectTypeInt:
-					p := dest()
-					if e := fnA2I(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
+					if ui, e := fnA2I(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid signed integer
 						err = ErrorDecode{
 							Err:   e,
 							Index: tokens[ti].Index,
 						}
 						return true
+					} else {
+						p := dest()
+						*(*int)(p) = ui
 					}
 
 				case ExpectTypeUint8:
@@ -895,7 +896,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 			case jscan.TokenTypeString:
 				p := dest()
-				tv := unescape.Valid(s[tokens[ti].Index+1 : tokens[ti].End-1])
+
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
@@ -904,7 +905,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					u := reflect.NewAt(
 						d.stackExp[si].RType, p,
 					).Interface().(encoding.TextUnmarshaler)
-					if errUnmarshal := u.UnmarshalText([]byte(tv)); errUnmarshal != nil {
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					tb := unescape.Valid[S, []byte](tv)
+					if errUnmarshal := u.UnmarshalText(tb); errUnmarshal != nil {
 						err = ErrorDecode{
 							Err:   errUnmarshal,
 							Index: tokens[ti].Index,
@@ -912,9 +915,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						return true
 					}
 				case ExpectTypeAny:
-					**(**interface{})(unsafe.Pointer(&p)) = string(tv)
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					**(**interface{})(unsafe.Pointer(&p)) = unescape.Valid[S, string](tv)
 				case ExpectTypeStr:
-					*(*string)(p) = string(tv)
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					*(*string)(p) = unescape.Valid[S, string](tv)
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -1099,12 +1104,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				case ExpectTypeStruct:
 				SCAN_KEYVALS:
 					for {
-						key := unescape.Valid(
-							s[tokens[ti].Index+1 : tokens[ti].End-1],
-						)
-						frameIndex := fieldFrameIndexByName(
-							d.stackExp[si].Fields, key,
-						)
+						tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+						key := unescape.Valid[S, string](tv)
+						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
 						if frameIndex == -1 {
 							// TODO: return error when option for unknown fields is enabled
 							// Skip value, go to the next key
@@ -1139,33 +1141,217 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 
 				case ExpectTypeMap:
 					// Record the key for insertion (once the value is read)
-					d.stackExp[si].LastMapKey = s[tokens[ti].Index+1 : tokens[ti].End-1]
+					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
 
 					// The key frame is guaranteed to be non-composite (single frame)
 					// and at an offset of 1 relative to the map frame index.
 					switch d.stackExp[si+1].Type {
+					case ExpectTypeTextUnmarshaler:
+						keyType := d.stackExp[si+1].RType
+						v := reflect.New(keyType)
+						iface := v.Interface().(encoding.TextUnmarshaler)
+						keyUnescaped := unescape.Valid[S, []byte](key)
+						if errU := iface.UnmarshalText(keyUnescaped); errU != nil {
+							err = ErrorDecode{
+								Err:   errU,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeStr:
-						// No checks necessary
+						d.stackExp[si].LastMapKey = unescape.Valid[S, string](key)
+
 					case ExpectTypeInt:
-						panic("TODO") // TODO: make sure the key is a valid int
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, errParse := fnA2I(key)
+						if errParse != nil {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeInt8:
-						panic("TODO") // TODO: make sure the key is a valid int8
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.I8(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeInt16:
-						panic("TODO") // TODO: make sure the key is a valid int16
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.I16(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeInt32:
-						panic("TODO") // TODO: make sure the key is a valid int32
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.I32(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeInt64:
-						panic("TODO") // TODO: make sure the key is a valid int64
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.I64(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeUint:
-						panic("TODO") // TODO: make sure the key is a valid uint
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, errParse := fnA2UI(key)
+						if errParse != nil {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeUint8:
-						panic("TODO") // TODO: make sure the key is a valid uint8
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.U8(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeUint16:
-						panic("TODO") // TODO: make sure the key is a valid uint16
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.U16(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeUint32:
-						panic("TODO") // TODO: make sure the key is a valid uint32
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.U32(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
+
 					case ExpectTypeUint64:
-						panic("TODO") // TODO: make sure the key is a valid uint64
+						_, rc := jsonnum.ReadNumber(key)
+						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						v, overflow := atoi.U64(key)
+						if overflow {
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+						d.stackExp[si].LastMapKey = v
 					}
 
 					// The value frame is guaranteed to be at an offset of 2
@@ -1205,21 +1391,29 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					var valKey reflect.Value
 					switch d.stackExp[siParent+1].Type {
 					case ExpectTypeStr:
-						key := unescape.Valid(d.stackExp[siParent].LastMapKey)
-						valKey = reflect.ValueOf(key)
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(string))
 					case ExpectTypeTextUnmarshaler:
-						keyType := d.stackExp[siParent+1].RType
-						key := unescape.Valid(d.stackExp[siParent].LastMapKey)
-						valKey = reflect.New(keyType)
-						u := valKey.Interface().(encoding.TextUnmarshaler)
-						valKey = valKey.Elem()
-						if errU := u.UnmarshalText([]byte(key)); errU != nil {
-							err = ErrorDecode{
-								Err:   errU,
-								Index: tokens[ti].Index,
-							}
-							return true
-						}
+						valKey = d.stackExp[siParent].LastMapKey.(reflect.Value).Elem()
+					case ExpectTypeInt:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int))
+					case ExpectTypeInt8:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int8))
+					case ExpectTypeInt16:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int16))
+					case ExpectTypeInt32:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int32))
+					case ExpectTypeInt64:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int64))
+					case ExpectTypeUint:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint))
+					case ExpectTypeUint8:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint8))
+					case ExpectTypeUint16:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint16))
+					case ExpectTypeUint32:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint32))
+					case ExpectTypeUint64:
+						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint64))
 					}
 					// Add key-value pair to the map
 					d.stackExp[siParent].MapValue.SetMapIndex(
@@ -1376,7 +1570,7 @@ func decodeAny[S ~[]byte | ~string](
 		return false, tokens[1:], nil
 	case jscan.TokenTypeString:
 		tv := str[tokens[0].Index+1 : tokens[0].End-1]
-		return string(unescape.Valid(tv)), tokens[1:], nil
+		return unescape.Valid[S, string](tv), tokens[1:], nil
 	case jscan.TokenTypeArray:
 		l := make([]any, 0, tokens[0].Elements)
 		for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeArrayEnd; {
@@ -1400,7 +1594,7 @@ func decodeAny[S ~[]byte | ~string](
 			if v, tokens, err = decodeAny(str, tokens[1:]); err != nil {
 				return nil, nil, err
 			}
-			m[unescape.Valid(key)] = v
+			m[unescape.Valid[S, string](key)] = v
 		}
 		return m, tokens[1:], nil
 	}

@@ -8,9 +8,10 @@ import (
 // Valid returns the unescaped version of str relying on str to be valid.
 // Don't use this function if str isn't guaranteed to contain no
 // invalid escape sequences.
-func Valid[S ~[]byte | ~string](str S) string {
+func Valid[S ~[]byte | ~string, O ~[]byte | ~string](str S) O {
+	var oz O
 	if len(str) < 1 {
-		return ""
+		return oz
 	}
 	var s string
 	switch in := any(str).(type) {
@@ -25,7 +26,7 @@ func Valid[S ~[]byte | ~string](str S) string {
 	}
 	i := strings.IndexByte(s, '\\')
 	if i < 0 {
-		return string(s)
+		return O(s)
 	}
 	buf := make([]byte, 0, len(s))
 	for {
@@ -98,7 +99,10 @@ func Valid[S ~[]byte | ~string](str S) string {
 	}
 	// Avoid copying the buffer, return it as a string instead
 	// because it's guaranteed to never be referenced and mutated.
-	return unsafe.String(unsafe.SliceData(buf), len(buf))
+	if _, ok := any(oz).(string); ok {
+		return O(unsafe.String(unsafe.SliceData(buf), len(buf)))
+	}
+	return O(buf)
 }
 
 var lutReplace = [256]byte{
