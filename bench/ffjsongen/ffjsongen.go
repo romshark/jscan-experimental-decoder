@@ -14,6 +14,10 @@ type IntArray struct {
 	Data []int `json:"data"`
 }
 
+type StringArray struct {
+	Data []string `json:"data"`
+}
+
 type MapStringString struct {
 	Data map[string]string `json:"data"`
 }

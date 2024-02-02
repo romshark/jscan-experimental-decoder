@@ -126,14 +126,40 @@ func JscanIntSlice[S []byte | string](
 		l := tokens[0].Elements
 		s = make([]int, l)
 		for i, t := 0, 1; tokens[t].Type != jscan.TokenTypeArrayEnd; i, t = i+1, t+1 {
-			if tokens[t].Type != jscan.TokenTypeInteger {
+			if s[i], err = tokens[t].Int(str); err != nil {
 				err = fmt.Errorf(
 					"at index %d: expected int, received: %s",
 					tokens[t].Index, tokens[t].Type.String(),
 				)
 				return true
 			}
-			if s[i], err = tokens[t].Int(str); err != nil {
+		}
+		return false
+	})
+	if errk.IsErr() {
+		if errk.Code == jscan.ErrorCodeCallback {
+			return nil, err
+		}
+		return nil, errk
+	}
+	return s, nil
+}
+
+func JscanStringSlice[S []byte | string](
+	t *jscan.Tokenizer[S], str S,
+) (s []string, err error) {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+		if tokens[0].Type != jscan.TokenTypeArray {
+			return true
+		}
+		l := tokens[0].Elements
+		s = make([]string, l)
+		for i, t := 0, 1; tokens[t].Type != jscan.TokenTypeArrayEnd; i, t = i+1, t+1 {
+			if s[i], err = tokens[t].String(str); err != nil {
+				err = fmt.Errorf(
+					"at index %d: expected string, received: %s",
+					tokens[t].Index, tokens[t].Type.String(),
+				)
 				return true
 			}
 		}
@@ -261,6 +287,18 @@ func GJSONArrayInt(j []byte) ([]int, error) {
 	return a, nil
 }
 
+func GJSONArrayString(j []byte) ([]string, error) {
+	if !gjson.ValidBytes(j) {
+		return nil, ErrInvalid
+	}
+	l := gjson.ParseBytes(j).Array()
+	a := make([]string, 0, len(l))
+	for _, item := range l {
+		a = append(a, item.String())
+	}
+	return a, nil
+}
+
 func GJSONStruct3(j []byte) (s Struct3, err error) {
 	if !gjson.ValidBytes(j) {
 		return s, ErrInvalid
@@ -332,6 +370,23 @@ func FastjsonArrayInt(j []byte) ([]int, error) {
 	a := make([]int, len(va))
 	for i := range va {
 		a[i] = va[i].GetInt()
+	}
+	return a, nil
+}
+
+func FastjsonArrayString(j []byte) ([]string, error) {
+	v, err := fastjson.ParseBytes(j)
+	if err != nil {
+		return nil, err
+	}
+	va := v.GetArray()
+	a := make([]string, len(va))
+	for i := range va {
+		s, err := va[i].StringBytes()
+		if err != nil {
+			return nil, err
+		}
+		a[i] = string(s)
 	}
 	return a, nil
 }
