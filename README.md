@@ -22,6 +22,8 @@ Roadmap:
 - [x] Arrays
 - [x] Type `any`
 - [x] Type `map`
+    - [x] `string` keys
+    - [x] `encoding.TextUnmarshaler` keys
     - [x] Integer keys
 - [ ] JSON struct tags
     - [x] Case-insensitive key matching.
