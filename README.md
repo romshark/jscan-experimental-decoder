@@ -22,7 +22,7 @@ Roadmap:
 - [x] Arrays
 - [x] Type `any`
 - [x] Type `map`
-    - [ ] Integer keys
+    - [x] Integer keys
 - [ ] JSON struct tags
     - [x] Case-insensitive key matching.
     - [ ] Option `string`
