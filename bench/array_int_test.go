@@ -170,7 +170,7 @@ func BenchmarkDecodeArrayInt12K(b *testing.B) {
 		var v []int
 		var err error
 		for n := 0; n < b.N; n++ {
-			if v, err = bench.GJSONArrayInt(in); err != nil {
+			if v, err = bench.FastjsonArrayInt(in); err != nil {
 				b.Fatal(err)
 			}
 		}
