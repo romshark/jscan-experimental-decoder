@@ -149,10 +149,11 @@ func TestDecodeAny(t *testing.T) {
 	s.testOK(t, "true", `true`, true)
 	s.testOK(t, "false", `false`, false)
 	s.testOK(t, "string", `"string"`, "string")
+	s.testOK(t, "string_escaped", `"\"\u30C4\""`, `"ツ"`)
 	s.testOK(t, "null", `null`, nil)
 	s.testOK(t, "array_empty", `[]`, []any{})
 	s.testOK(t, "array_int", `[0,1,2]`, []any{float64(0), float64(1), float64(2)})
-	s.testOK(t, "array_string", `["a", "b"]`, []any{"a", "b"})
+	s.testOK(t, "array_string", `["a", "b", "\t"]`, []any{"a", "b", "\t"})
 	s.testOK(t, "array_bool", `[true, false]`, []any{true, false})
 	s.testOK(t, "array_null", `[null, null, null]`, []any{nil, nil, nil})
 	s.testOK(t, "object_empty", `{}`, map[string]any{})
@@ -160,19 +161,19 @@ func TestDecodeAny(t *testing.T) {
 		[]any{nil, false, float64(42), "x", map[string]any{}, true})
 	s.testOK(t, "object_multi", `{
 		"num":         42,
-		"str":         "text",
+		"str":         "\"text\u30C4\u044B\"",
 		"bool_true":   true,
 		"bool_false":  false,
 		"array_empty": [],
-		"array_mix":   [null, false, 42, "x", {}, true],
+		"array_mix":   [null, false, 42, "\/\r\n", {}, true],
 		"null":        null
 	}`, map[string]any{
 		"num":         float64(42),
-		"str":         "text",
+		"str":         `"textツы"`,
 		"bool_true":   true,
 		"bool_false":  false,
 		"array_empty": []any{},
-		"array_mix":   []any{nil, false, float64(42), "x", map[string]any{}, true},
+		"array_mix":   []any{nil, false, float64(42), "/\r\n", map[string]any{}, true},
 		"null":        nil,
 	})
 }
@@ -550,7 +551,9 @@ func TestDecodeString(t *testing.T) {
 	s.testOK(t, "empty", `""`, "")
 	s.testOK(t, "spaces", `"   "`, "   ")
 	s.testOK(t, "hello_world", `"Hello World!"`, "Hello World!")
-	s.testOK(t, "unicede", `"юникодж"`, "юникодж")
+	s.testOK(t, "unicode", `"юникод-жеж"`, "юникод-жеж")
+	s.testOK(t, "escaped", `"\"\\\""`, `"\"`)
+	s.testOK(t, "escaped_unicode", `"\u0436\u0448\u0444\u30C4"`, `жшфツ`)
 }
 
 func TestDecode2DSliceBool(t *testing.T) {
@@ -859,6 +862,8 @@ func TestDecodeMapStringToString(t *testing.T) {
 			"foo": "1", "bar": "a", "baz": "2", "muzz": "",
 			"longer_key": "longer test text",
 		})
+	s.testOK(t, "escaped",
+		`{"\"key\"":"\"value\"\t\u0042"}`, M{"\"key\"": "\"value\"\tB"})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -905,6 +910,8 @@ func TestDecodeMapStringToMapStringToString(t *testing.T) {
 			"first_key":  M2{"f1": "first1_value", "f2": "first2_value"},
 			"second_key": nil,
 		})
+	s.testOK(t, "escaped",
+		`{" \b " : {" \" ":" \u30C4 "} }`, M{" \b ": M2{` " `: ` ツ `}})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -932,6 +939,8 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 		`{"x":{}}`, M{"x": {}})
 	s.testOK(t, "null_value",
 		`{"":null}`, M{"": {}})
+	s.testOK(t, "escaped_key",
+		`{"\u30c4":{}}`, M{`ツ`: {}})
 	s.testOK(t, "multiple",
 		`{
 			"x":{"name":"first","id":1},
@@ -952,38 +961,117 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 }
 
 func TestDecodeJSONUnmarshaler(t *testing.T) {
-	s := newTestSetup[unmarshalerImpl]()
-	s.testOK(t, "integer", `123`, unmarshalerImpl{Value: `123`})
-	s.testOK(t, "float", `3.14`, unmarshalerImpl{Value: `3.14`})
-	s.testOK(t, "string", `"okay"`, unmarshalerImpl{Value: `"okay"`})
-	s.testOK(t, "true", `true`, unmarshalerImpl{Value: `true`})
-	s.testOK(t, "false", `false`, unmarshalerImpl{Value: `false`})
-	s.testOK(t, "null", `null`, unmarshalerImpl{Value: `null`})
-	s.testOK(t, "array_empty", `[]`, unmarshalerImpl{Value: `[]`})
+	s := newTestSetup[jsonUnmarshalerImpl]()
+	s.testOK(t, "integer", `123`, jsonUnmarshalerImpl{Value: `123`})
+	s.testOK(t, "float", `3.14`, jsonUnmarshalerImpl{Value: `3.14`})
+	s.testOK(t, "string", `"okay"`, jsonUnmarshalerImpl{Value: `"okay"`})
+	s.testOK(t, "true", `true`, jsonUnmarshalerImpl{Value: `true`})
+	s.testOK(t, "false", `false`, jsonUnmarshalerImpl{Value: `false`})
+	s.testOK(t, "null", `null`, jsonUnmarshalerImpl{Value: `null`})
+	s.testOK(t, "array_empty", `[]`, jsonUnmarshalerImpl{Value: `[]`})
 	s.testOK(t, "array", `[1,"okay",true,{ }]`,
-		unmarshalerImpl{Value: `[1,"okay",true,{ }]`})
-	s.testOK(t, "object_empty", `{}`, unmarshalerImpl{Value: `{}`})
+		jsonUnmarshalerImpl{Value: `[1,"okay",true,{ }]`})
+	s.testOK(t, "object_empty", `{}`, jsonUnmarshalerImpl{Value: `{}`})
 	s.testOK(t, "object_empty", `{"foo":{"bar":"baz"}}`,
-		unmarshalerImpl{Value: `{"foo":{"bar":"baz"}}`})
+		jsonUnmarshalerImpl{Value: `{"foo":{"bar":"baz"}}`})
 }
 
-func TestDecodeJSONUnmarshalerField(t *testing.T) {
+func TestDecodeTextUnmarshaler(t *testing.T) {
+	s := newTestSetup[textUnmarshalerImpl]()
+	s.testOK(t, "string", `"text"`, textUnmarshalerImpl{Value: `text`})
+	s.testOK(t, "string_escaped", `"\"text\""`, textUnmarshalerImpl{Value: `"text"`})
+	s.testOK(t, "null", `null`, textUnmarshalerImpl{Value: ``})
+	s.testOK(t, "string_empty", `""`, textUnmarshalerImpl{Value: ``})
+
+	s.testErr(t, "int", `123`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array_empty", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `["foo"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"foo":"bar"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeTextUnmarshalerMapKey(t *testing.T) {
+	type U = textUnmarshalerImpl
+	s := newTestSetup[map[U]int]()
+	s.testOK(t, "empty", `{}`, map[U]int{})
+	s.testOK(t, "null", `null`, map[U]int(nil))
+	s.testOK(t, "text", `{"text":1}`, map[U]int{{Value: "text"}: 1})
+	s.testOK(t, "empty_key", `{"":2}`, map[U]int{{Value: ""}: 2})
+	s.testOK(t, "escaped", `{"\"escaped\tkey\"":3}`,
+		map[U]int{{Value: "\"escaped\tkey\""}: 3})
+
+	s.testErr(t, "int", `123`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array_empty", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `["foo"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"foo":"bar"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 7})
+}
+
+func TestDecodeUnmarshalerFields(t *testing.T) {
 	type S struct {
-		Name        string          `json:"name"`
-		Unmarshaler unmarshalerImpl `json:"unmar"`
-		Tail        []int           `json:"tail"`
+		String string              `json:"string"`
+		JSON   jsonUnmarshalerImpl `json:"json"`
+		Text   textUnmarshalerImpl `json:"text"`
+		Tail   []int               `json:"tail"`
 	}
 	s := newTestSetup[S]()
-	s.testOK(t, "integer", `{"name":"a","unmar":42,"tail":[1,2]}`,
-		S{Name: "a", Unmarshaler: unmarshalerImpl{Value: `42`}, Tail: []int{1, 2}})
-	s.testOK(t, "string", `{"name":"b","unmar":"text","tail":[1,2]}`,
-		S{Name: "b", Unmarshaler: unmarshalerImpl{Value: `"text"`}, Tail: []int{1, 2}})
-	s.testOK(t, "array", `{"name":"c","unmar":[1,2, 3],"tail":[1,2]}`,
-		S{Name: "c", Unmarshaler: unmarshalerImpl{Value: `[1,2, 3]`}, Tail: []int{1, 2}})
-	s.testOK(t, "object", `{"name":"d","unmar":{"foo":["bar", null]},"tail":[1,2]}`,
-		S{Name: "d", Unmarshaler: unmarshalerImpl{
-			Value: `{"foo":["bar", null]}`,
-		}, Tail: []int{1, 2}})
+	s.testOK(t, "integer",
+		`{"string":"a","json":42,"text":"foo","tail":[1,2]}`,
+		S{
+			String: "a",
+			JSON:   jsonUnmarshalerImpl{Value: `42`},
+			Text:   textUnmarshalerImpl{Value: "foo"},
+			Tail:   []int{1, 2},
+		})
+	s.testOK(t, "string", `{
+		"string":"b",
+		"json":"\"text\"",
+		"text":"\"text\"",
+		"tail":[1,2]}`,
+		S{
+			String: "b",
+			JSON:   jsonUnmarshalerImpl{Value: `"\"text\""`},
+			Text:   textUnmarshalerImpl{Value: `"text"`},
+			Tail:   []int{1, 2},
+		})
+	s.testOK(t, "array", `{"string":"c","json":[1,2, 3],"text":"","tail":[1,2]}`,
+		S{
+			String: "c",
+			JSON:   jsonUnmarshalerImpl{Value: `[1,2, 3]`},
+			Text:   textUnmarshalerImpl{Value: ""},
+			Tail:   []int{1, 2},
+		})
+	s.testOK(t, "object", `{"string":"d","json":{"foo":["bar", null]},"tail":[1,2]}`,
+		S{
+			String: "d",
+			JSON:   jsonUnmarshalerImpl{Value: `{"foo":["bar", null]}`},
+			Text:   textUnmarshalerImpl{Value: ""},
+			Tail:   []int{1, 2},
+		})
 }
 
 func TestDecodeJSONUnmarshalerErr(t *testing.T) {
@@ -1022,11 +1110,19 @@ func require64bitSystem(t *testing.T) {
 		"this test must run on a 64-bit system")
 }
 
-// unmarshalerImpl implements encoding/json.Unmarshaler.
-type unmarshalerImpl struct{ Value string }
+// jsonUnmarshalerImpl implements encoding/json.Unmarshaler.
+type jsonUnmarshalerImpl struct{ Value string }
 
-func (impl *unmarshalerImpl) UnmarshalJSON(data []byte) error {
+func (impl *jsonUnmarshalerImpl) UnmarshalJSON(data []byte) error {
 	impl.Value = string(data)
+	return nil
+}
+
+// textUnmarshalerImpl implements encoding/json.Unmarshaler.
+type textUnmarshalerImpl struct{ Value string }
+
+func (impl *textUnmarshalerImpl) UnmarshalText(text []byte) error {
+	impl.Value = string(text)
 	return nil
 }
 

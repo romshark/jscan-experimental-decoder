@@ -2,6 +2,7 @@ package jscandec
 
 import (
 	_ "embed"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -250,6 +251,28 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
+			Input: map[testImplTextUnmarshaler]int{},
+			ExpectStack: []stackFrame[string]{
+				{
+					RType:            reflect.TypeOf(map[testImplTextUnmarshaler]int{}),
+					Type:             ExpectTypeMap,
+					Size:             reflect.TypeOf(map[testImplTextUnmarshaler]int{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{ // Key
+					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
+					Type:             ExpectTypeTextUnmarshaler,
+					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
+					ParentFrameIndex: 0,
+				},
+				{ // Value
+					Type:             ExpectTypeInt,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
 			Input: map[int]S1{},
 			ExpectStack: []stackFrame[string]{
 				{
@@ -406,7 +429,7 @@ func TestAppendTypeToStack(t *testing.T) {
 		{
 			Input: testImplJSONUnmarshaler{},
 			ExpectStack: []stackFrame[string]{
-				{ // *
+				{
 					Type:             ExpectTypeJSONUnmarshaler,
 					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
@@ -417,10 +440,32 @@ func TestAppendTypeToStack(t *testing.T) {
 		{
 			Input: &testImplJSONUnmarshaler{},
 			ExpectStack: []stackFrame[string]{
-				{ // *
+				{
 					Type:             ExpectTypeJSONUnmarshaler,
 					RType:            reflect.TypeOf(&testImplJSONUnmarshaler{}),
 					Size:             reflect.TypeOf(&testImplJSONUnmarshaler{}).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: testImplTextUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeTextUnmarshaler,
+					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
+					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: &testImplTextUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeTextUnmarshaler,
+					RType:            reflect.TypeOf(&testImplTextUnmarshaler{}),
+					Size:             reflect.TypeOf(&testImplTextUnmarshaler{}).Size(),
 					ParentFrameIndex: -1,
 				},
 			},
@@ -442,13 +487,29 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
-			Input: testImplJSONUnmarshalerWithUnmarshalerField{},
+			Input: []testImplTextUnmarshaler{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]any{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeTextUnmarshaler,
+					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
+					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: testImplUnmarshalerWithUnmarshalerFields{},
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeJSONUnmarshaler,
-					RType: reflect.TypeOf(testImplJSONUnmarshalerWithUnmarshalerField{}),
+					RType: reflect.TypeOf(testImplUnmarshalerWithUnmarshalerFields{}),
 					Size: reflect.TypeOf(
-						testImplJSONUnmarshalerWithUnmarshalerField{},
+						testImplUnmarshalerWithUnmarshalerFields{},
 					).Size(),
 					ParentFrameIndex: -1,
 				},
@@ -556,15 +617,36 @@ func (t *testImplJSONUnmarshaler) UnmarshalJSON(data []byte) error {
 
 var _ json.Unmarshaler = &testImplJSONUnmarshaler{}
 
-// testImplJSONUnmarshalerWithUnmarshalerField implements encoding/json.Unmarshaler
-// but also features a field that implements said interface for testing purposes.
-type testImplJSONUnmarshalerWithUnmarshalerField struct{ Inner json.Unmarshaler }
+// testImplTextUnmarshaler implements encoding.TextUnmarshaler for testing purposes.
+type testImplTextUnmarshaler struct{ LenBytes int }
 
-func (t *testImplJSONUnmarshalerWithUnmarshalerField) UnmarshalJSON(data []byte) error {
-	return t.Inner.UnmarshalJSON(data)
+func (t *testImplTextUnmarshaler) UnmarshalText(text []byte) error {
+	t.LenBytes = len(text)
+	return nil
 }
 
-var _ json.Unmarshaler = &testImplJSONUnmarshalerWithUnmarshalerField{}
+var _ encoding.TextUnmarshaler = &testImplTextUnmarshaler{}
+
+// testImplUnmarshalerWithUnmarshalerFields implements encoding/json.Unmarshaler
+// and encoding.TextUnmarshaler but also features a field that implements said
+// interfaces for testing purposes.
+type testImplUnmarshalerWithUnmarshalerFields struct {
+	InnerJSON json.Unmarshaler
+	InnerText encoding.TextUnmarshaler
+}
+
+func (t *testImplUnmarshalerWithUnmarshalerFields) UnmarshalJSON(data []byte) error {
+	return t.InnerJSON.UnmarshalJSON(data)
+}
+
+func (t *testImplUnmarshalerWithUnmarshalerFields) UnmarshalText(text []byte) error {
+	return t.InnerText.UnmarshalText(text)
+}
+
+var (
+	_ json.Unmarshaler         = &testImplUnmarshalerWithUnmarshalerFields{}
+	_ encoding.TextUnmarshaler = &testImplUnmarshalerWithUnmarshalerFields{}
+)
 
 func Ptr[T any](v T) *T { return &v }
 
@@ -577,31 +659,69 @@ func TestDetermineJSONUnmarshalerSupport(t *testing.T) {
 
 	for _, td := range []struct {
 		Input  reflect.Type
-		Expect jsonUnmarshalerSupport
+		Expect interfaceSupport
 	}{
 		{
 			Input:  reflect.TypeOf(int(0)),
-			Expect: jsonUnmarshalerSupportNone,
+			Expect: interfaceSupportNone,
 		},
 		{
 			Input:  reflect.TypeOf(Ptr(int(0))),
-			Expect: jsonUnmarshalerSupportNone,
+			Expect: interfaceSupportNone,
 		},
 		{
-			Input:  reflect.TypeOf(json.RawMessage("")),
-			Expect: jsonUnmarshalerSupportPtr,
+			Input:  reflect.TypeOf(testImplJSONUnmarshaler{}),
+			Expect: interfaceSupportPtr,
 		},
 		{
-			Input:  reflect.TypeOf(Ptr(json.RawMessage(""))),
-			Expect: jsonUnmarshalerSupportCopy,
+			Input:  reflect.TypeOf(Ptr(testImplJSONUnmarshaler{})),
+			Expect: interfaceSupportCopy,
 		},
 		{
 			Input:  reflect.TypeOf(Ptr(testStruct{})),
-			Expect: jsonUnmarshalerSupportNone,
+			Expect: interfaceSupportNone,
 		},
 	} {
 		t.Run(td.Input.String(), func(t *testing.T) {
 			require.Equal(t, td.Expect, determineJSONUnmarshalerSupport(td.Input))
+		})
+	}
+}
+
+func TestDetermineTextUnmarshalerSupport(t *testing.T) {
+	type testStruct struct {
+		Name   string   `json:"name"`
+		Number int      `json:"number"`
+		Tags   []string `json:"tags"`
+	}
+
+	for _, td := range []struct {
+		Input  reflect.Type
+		Expect interfaceSupport
+	}{
+		{
+			Input:  reflect.TypeOf(int(0)),
+			Expect: interfaceSupportNone,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(int(0))),
+			Expect: interfaceSupportNone,
+		},
+		{
+			Input:  reflect.TypeOf(testImplTextUnmarshaler{}),
+			Expect: interfaceSupportPtr,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(testImplTextUnmarshaler{})),
+			Expect: interfaceSupportCopy,
+		},
+		{
+			Input:  reflect.TypeOf(Ptr(testStruct{})),
+			Expect: interfaceSupportNone,
+		},
+	} {
+		t.Run(td.Input.String(), func(t *testing.T) {
+			require.Equal(t, td.Expect, determineTextUnmarshalerSupport(td.Input))
 		})
 	}
 }

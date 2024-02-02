@@ -1,6 +1,7 @@
 package jscandec
 
 import (
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/romshark/jscan-experimental-decoder/internal/atoi"
+	"github.com/romshark/jscan-experimental-decoder/internal/unescape"
 
 	"github.com/romshark/jscan/v2"
 )
@@ -43,6 +45,7 @@ const (
 	_ ExpectType = iota
 
 	ExpectTypeJSONUnmarshaler
+	ExpectTypeTextUnmarshaler
 	ExpectTypePtr
 	ExpectTypeAny
 	ExpectTypeMap
@@ -69,6 +72,8 @@ func (t ExpectType) String() string {
 	switch t {
 	case ExpectTypeJSONUnmarshaler:
 		return "interface{UnmarshalJSON([]byte)error}"
+	case ExpectTypeTextUnmarshaler:
+		return "interface{UnmarshalText([]byte)error}"
 	case ExpectTypePtr:
 		return "*"
 	case ExpectTypeAny:
@@ -227,10 +232,16 @@ func appendTypeToStack[S []byte | string](
 			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
 			ParentFrameIndex: len(stack) - 1,
 		})
-	}
-	if s := determineJSONUnmarshalerSupport(t); s > 0 {
+	} else if s := determineJSONUnmarshalerSupport(t); s != interfaceSupportNone {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeJSONUnmarshaler,
+			RType:            t,
+			Size:             t.Size(),
+			ParentFrameIndex: len(stack) - 1,
+		})
+	} else if s := determineTextUnmarshalerSupport(t); s != interfaceSupportNone {
+		return append(stack, stackFrame[S]{
+			Type:             ExpectTypeTextUnmarshaler,
 			RType:            t,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
@@ -448,14 +459,19 @@ func appendTypeToStack[S []byte | string](
 	return stack
 }
 
-var tpJSONUnmarshaler = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+var (
+	tpJSONUnmarshaler = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
+	tpTextUnmarshaler = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+)
 
-type jsonUnmarshalerSupport uint8
+type (
+	interfaceSupport uint8
+)
 
 const (
-	jsonUnmarshalerSupportNone jsonUnmarshalerSupport = iota
-	jsonUnmarshalerSupportCopy
-	jsonUnmarshalerSupportPtr
+	interfaceSupportNone interfaceSupport = iota
+	interfaceSupportCopy
+	interfaceSupportPtr
 )
 
 // determineJSONUnmarshalerSupport returns:
@@ -463,14 +479,29 @@ const (
 //   - jsonUnmarshalerSupportNone if t doesn't implement encoding/json.Unmarshaler
 //   - jsonUnmarshalerSupportCopy if t implements encoding/json.Unmarshaler
 //   - jsonUnmarshalerSupportPtr if pointer to t implements encoding/json.Unmarshaler.
-func determineJSONUnmarshalerSupport(t reflect.Type) jsonUnmarshalerSupport {
+func determineJSONUnmarshalerSupport(t reflect.Type) interfaceSupport {
 	if t.AssignableTo(tpJSONUnmarshaler) {
-		return jsonUnmarshalerSupportCopy
+		return interfaceSupportCopy
 	}
 	if t.Kind() != reflect.Ptr && reflect.PointerTo(t).AssignableTo(tpJSONUnmarshaler) {
-		return jsonUnmarshalerSupportPtr
+		return interfaceSupportPtr
 	}
-	return jsonUnmarshalerSupportNone
+	return interfaceSupportNone
+}
+
+// determineTextUnmarshalerSupport returns:
+//
+//   - textUnmarshalerSupportNone if t doesn't implement encoding/json.Unmarshaler
+//   - textUnmarshalerSupportCopy if t implements encoding/json.Unmarshaler
+//   - textUnmarshalerSupportPtr if pointer to t implements encoding/json.Unmarshaler.
+func determineTextUnmarshalerSupport(t reflect.Type) interfaceSupport {
+	if t.AssignableTo(tpTextUnmarshaler) {
+		return interfaceSupportCopy
+	}
+	if t.Kind() != reflect.Ptr && reflect.PointerTo(t).AssignableTo(tpTextUnmarshaler) {
+		return interfaceSupportPtr
+	}
+	return interfaceSupportNone
 }
 
 // Decode unmarshals the JSON contents of s into t.
@@ -572,10 +603,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 	si := 0
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
+	dest := func() unsafe.Pointer {
+		return unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
+	}
+
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		for ti := 0; ti < len(tokens); {
-			p := unsafe.Pointer(uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset)
 			if d.stackExp[si].Type == ExpectTypePtr {
+				p := dest()
 				si++
 				dp := allocate(d.stackExp[si].Size)
 				d.stackExp[si].Dest = dp
@@ -586,11 +621,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
+					p := dest()
 					v := tokens[ti].Type == jscan.TokenTypeTrue
 					**(**interface{})(unsafe.Pointer(&p)) = v
 				case ExpectTypeBool:
+					p := dest()
 					*(*bool)(p) = tokens[ti].Type == jscan.TokenTypeTrue
 				default:
 					err = ErrorDecode{
@@ -605,8 +642,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeInteger:
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
+					p := dest()
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
 					var su string
@@ -634,6 +672,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						}
 						return true
 					}
+					p := dest()
 					if e := fnA2UI(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						// Invalid unsigned integer
 						err = ErrorDecode{
@@ -644,6 +683,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 
 				case ExpectTypeInt:
+					p := dest()
 					if e := fnA2I(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						// Invalid signed integer
 						err = ErrorDecode{
@@ -654,6 +694,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					}
 
 				case ExpectTypeUint8:
+					p := dest()
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -673,6 +714,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*uint8)(p) = v
 
 				case ExpectTypeUint16:
+					p := dest()
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -692,6 +734,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*uint16)(p) = v
 
 				case ExpectTypeUint32:
+					p := dest()
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -711,6 +754,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*uint32)(p) = v
 
 				case ExpectTypeUint64:
+					p := dest()
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -730,6 +774,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*uint64)(p) = v
 
 				case ExpectTypeInt8:
+					p := dest()
 					v, overflow := atoi.I8(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 8-bit signed integer
@@ -742,6 +787,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*int8)(p) = v
 
 				case ExpectTypeInt16:
+					p := dest()
 					v, overflow := atoi.I16(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 16-bit signed integer
@@ -754,6 +800,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*int16)(p) = v
 
 				case ExpectTypeInt32:
+					p := dest()
 					v, overflow := atoi.I32(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 32-bit signed integer
@@ -766,6 +813,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*int32)(p) = v
 
 				case ExpectTypeInt64:
+					p := dest()
 					v, overflow := atoi.I64(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 64-bit signed integer
@@ -778,12 +826,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					*(*int64)(p) = v
 
 				case ExpectTypeFloat32:
+					p := dest()
 					if e := fnA2F32(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
 						return true
 					}
 
 				case ExpectTypeFloat64:
+					p := dest()
 					if e := fnA2F64(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
 						return true
@@ -802,8 +852,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeNumber:
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
+					p := dest()
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
 					var su string
@@ -824,11 +875,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					**(**interface{})(unsafe.Pointer(&p)) = v
 
 				case ExpectTypeFloat32:
+					p := dest()
 					if e := fnA2F32(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
 						return true
 					}
 				case ExpectTypeFloat64:
+					p := dest()
 					if e := fnA2F64(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
 						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
 						return true
@@ -841,10 +894,23 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeString:
-				tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+				p := dest()
+				tv := unescape.Valid(s[tokens[ti].Index+1 : tokens[ti].End-1])
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
+				case ExpectTypeTextUnmarshaler:
+					p := dest()
+					u := reflect.NewAt(
+						d.stackExp[si].RType, p,
+					).Interface().(encoding.TextUnmarshaler)
+					if errUnmarshal := u.UnmarshalText([]byte(tv)); errUnmarshal != nil {
+						err = ErrorDecode{
+							Err:   errUnmarshal,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
 				case ExpectTypeAny:
 					**(**interface{})(unsafe.Pointer(&p)) = string(tv)
 				case ExpectTypeStr:
@@ -861,9 +927,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNull:
+				p := dest()
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					// Nothing
 				case ExpectTypeSlice:
@@ -905,8 +972,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeArray:
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
+					p := dest()
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
 						err = ErrorDecode{
@@ -920,6 +988,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					goto ON_VAL_END
 
 				case ExpectTypeArray:
+					p := dest()
 					if tokens[ti].Elements < 1 {
 						ti += 2 // Skip over closing TokenArrayEnd
 						// Empty array, no need to allocate memory.
@@ -945,6 +1014,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					d.stackExp[si].AdvanceBy = elementSize
 
 				case ExpectTypeSlice:
+					p := dest()
 					elementSize := d.stackExp[si+1].Size
 
 					var dp unsafe.Pointer
@@ -976,8 +1046,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			case jscan.TokenTypeObject:
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
-					goto ON_UNMARSHALER
+					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
+					p := dest()
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
 						err = ErrorDecode{
@@ -991,6 +1062,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					goto ON_VAL_END
 
 				case ExpectTypeMap:
+					p := dest()
 					d.stackExp[si].MapValue = reflect.MakeMapWithSize(
 						d.stackExp[si].RType, tokens[ti].Elements,
 					)
@@ -1002,6 +1074,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 					ti++
 
 				case ExpectTypeStruct:
+					p := dest()
 					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
 						ti += 2
 						goto ON_VAL_END
@@ -1026,7 +1099,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				case ExpectTypeStruct:
 				SCAN_KEYVALS:
 					for {
-						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+						key := unescape.Valid(
+							s[tokens[ti].Index+1 : tokens[ti].End-1],
+						)
 						frameIndex := fieldFrameIndexByName(
 							d.stackExp[si].Fields, key,
 						)
@@ -1127,10 +1202,28 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 				case ExpectTypeArray, ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
 				case ExpectTypeMap:
+					var valKey reflect.Value
+					switch d.stackExp[siParent+1].Type {
+					case ExpectTypeStr:
+						key := unescape.Valid(d.stackExp[siParent].LastMapKey)
+						valKey = reflect.ValueOf(key)
+					case ExpectTypeTextUnmarshaler:
+						keyType := d.stackExp[siParent+1].RType
+						key := unescape.Valid(d.stackExp[siParent].LastMapKey)
+						valKey = reflect.New(keyType)
+						u := valKey.Interface().(encoding.TextUnmarshaler)
+						valKey = valKey.Elem()
+						if errU := u.UnmarshalText([]byte(key)); errU != nil {
+							err = ErrorDecode{
+								Err:   errU,
+								Index: tokens[ti].Index,
+							}
+							return true
+						}
+					}
 					// Add key-value pair to the map
-					key := d.stackExp[siParent].LastMapKey
 					d.stackExp[siParent].MapValue.SetMapIndex(
-						reflect.ValueOf(string(key)),
+						valKey,
 						reflect.NewAt(
 							d.stackExp[siParent].RType.Elem(), d.stackExp[si].Dest,
 						).Elem(),
@@ -1149,8 +1242,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 			}
 			continue
 
-		ON_UNMARSHALER:
+		ON_JSON_UNMARSHALER:
 			{
+				p := dest()
 				var raw S
 				tkIndex := tokens[ti].Index
 				switch tokens[ti].Type {
@@ -1281,7 +1375,8 @@ func decodeAny[S ~[]byte | ~string](
 	case jscan.TokenTypeFalse:
 		return false, tokens[1:], nil
 	case jscan.TokenTypeString:
-		return string(str[tokens[0].Index+1 : tokens[0].End-1]), tokens[1:], nil
+		tv := str[tokens[0].Index+1 : tokens[0].End-1]
+		return string(unescape.Valid(tv)), tokens[1:], nil
 	case jscan.TokenTypeArray:
 		l := make([]any, 0, tokens[0].Elements)
 		for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeArrayEnd; {
@@ -1305,7 +1400,7 @@ func decodeAny[S ~[]byte | ~string](
 			if v, tokens, err = decodeAny(str, tokens[1:]); err != nil {
 				return nil, nil, err
 			}
-			m[string(key)] = v
+			m[unescape.Valid(key)] = v
 		}
 		return m, tokens[1:], nil
 	}
