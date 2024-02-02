@@ -26,9 +26,10 @@ Roadmap:
     - [x] `encoding.TextUnmarshaler` keys
     - [x] Integer keys
 - [ ] JSON struct tags
-    - [x] Case-insensitive key matching.
+    - [ ] Option `DisallowUnknownFields`
+    - [x] Case-insensitive key matching
     - [ ] Option `string`
 - [x] Pointers
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
-- [ ] Type `json.RawMessage`
+- [ ] `encoding/json` compatible drop-in replacement package `jscandec/std`
