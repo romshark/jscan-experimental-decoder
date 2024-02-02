@@ -190,6 +190,8 @@ func TestDecodeUint(t *testing.T) {
 	s.testErr(t, "overflow_l21", `111111111111111111111`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 0})
 
+	s.testErr(t, "negative", `-1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "true", `true`,
@@ -198,12 +200,10 @@ func TestDecodeUint(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "-1", `-1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
-	// s.testErr(t, "null", `null`,
-	// 	jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
-	// s.testErr(t, "float", `0.1`,
-	//	jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
-	// s.testErr(t, "exponent", `1e2`,
-	//	jscandec.ErrorDecode{Err: ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `0.1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "exponent", `1e2`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "array", `[]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
@@ -326,6 +326,8 @@ func TestDecodeUint64(t *testing.T) {
 	s.testErr(t, "overflow_l21", `111111111111111111111`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 0})
 
+	s.testErr(t, "negative", `-1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "true", `true`,
@@ -374,6 +376,8 @@ func TestDecodeUint32(t *testing.T) {
 	s.testErr(t, "overflow_l11", `11111111111`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 0})
 
+	s.testErr(t, "negative", `-1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "true", `true`,
@@ -420,6 +424,8 @@ func TestDecodeUint16(t *testing.T) {
 	s.testErr(t, "overflow_l6", `111111`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 0})
 
+	s.testErr(t, "negative", `-1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "true", `true`,
@@ -466,6 +472,8 @@ func TestDecodeUint8(t *testing.T) {
 	s.testErr(t, "overflow_l4", `1111`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 0})
 
+	s.testErr(t, "negative", `-1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "true", `true`,
