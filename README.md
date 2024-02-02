@@ -22,10 +22,11 @@ Roadmap:
 - [x] Arrays
 - [x] Type `any`
 - [x] Type `map`
+    - [ ] Integer keys
 - [ ] JSON struct tags
     - [x] Case-insensitive key matching.
     - [ ] Option `string`
 - [x] Pointers
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
-- [ ] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
+- [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
 - [ ] Type `json.RawMessage`
