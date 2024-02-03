@@ -1264,7 +1264,7 @@ func TestDecodeMapStringToString(t *testing.T) {
 		`{"":null}`, M{"": ""})
 	s.testOK(t, "duplicate_values",
 		`{"a":"1","a":"2"}`, M{"a": "2"}) // Take last
-	s.testOK(t, "mulitple_overrides",
+	s.testOK(t, "multiple_overrides",
 		`{"":"1", "":"12", "":"123"}`, M{"": "123"}) // Take last
 	s.testOK(t, "many",
 		`{
@@ -1556,7 +1556,7 @@ func TestDecodeMapStringToMapStringToString(t *testing.T) {
 	s.testOK(t, "duplicate_values",
 		`{"a":{"foo":"bar"},"a":{"baz":"faz"}}`,
 		M{"a": M2{"baz": "faz"}}) // Take last
-	s.testOK(t, "mulitple_overrides",
+	s.testOK(t, "multiple_overrides",
 		`{"":{"a":"b"}, "":{"c":"d"}, "":{"e":"f"}}`,
 		M{"": {"e": "f"}}) // Take last
 	s.testOK(t, "mixed",
