@@ -54,6 +54,7 @@ const (
 	ExpectTypeArray
 	ExpectTypeSlice
 	ExpectTypeStruct
+	ExpectTypeEmptyStruct
 	ExpectTypeBool
 	ExpectTypeStr
 	ExpectTypeFloat32
@@ -88,6 +89,8 @@ func (t ExpectType) String() string {
 		return "slice"
 	case ExpectTypeStruct:
 		return "struct"
+	case ExpectTypeEmptyStruct:
+		return "struct{}"
 	case ExpectTypeBool:
 		return "boolean"
 	case ExpectTypeStr:
@@ -316,6 +319,13 @@ func appendTypeToStack[S []byte | string](
 	case reflect.Struct:
 		parentIndex := len(stack)
 		numFields := t.NumField()
+		if numFields == 0 {
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeEmptyStruct,
+				ParentFrameIndex: len(stack) - 1,
+			})
+		}
 		stack = append(stack, stackFrame[S]{
 			Fields:           make([]fieldStackFrame, 0, numFields),
 			Size:             t.Size(),
@@ -954,6 +964,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				switch d.stackExp[si].Type {
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
+				case ExpectTypeEmptyStruct:
+					// Nothing
 				case ExpectTypeAny:
 					// Nothing
 				case ExpectTypeSlice:
@@ -1068,10 +1080,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 			case jscan.TokenTypeObject:
 				switch d.stackExp[si].Type {
+				case ExpectTypeEmptyStruct:
+					ti = tokens[ti].End // Skip object value
+					goto ON_VAL_END
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
-					p := dest()
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
 						err = ErrorDecode{
@@ -1080,6 +1094,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
+					p := dest()
 					**(**interface{})(unsafe.Pointer(&p)) = v
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END

@@ -678,6 +678,29 @@ func TestDecodeMatrix4Int(t *testing.T) {
 		T{{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}})
 }
 
+func TestDecodeEmptyStruct(t *testing.T) {
+	type S struct{}
+	s := newTestSetup[S](*jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, S{})
+	s.testOK(t, "empty_object", `{}`, S{})
+	s.testOK(t, "object", `{"x":"y"}`, S{})
+	s.testOK(t, "object_multikey",
+		`{"x":"y","abc":[{"x":"y","2":42}, null, {}]}`, S{})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array_empty", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[{},{}]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeStruct(t *testing.T) {
 	type S struct {
 		Foo int    `json:"foo"`

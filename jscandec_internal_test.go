@@ -68,6 +68,16 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
+			Input: struct{}{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeEmptyStruct,
+					Size:             reflect.TypeOf(struct{}{}).Size(),
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
 			Input: S1{},
 			ExpectStack: []stackFrame[string]{
 				{ // S1
