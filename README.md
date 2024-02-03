@@ -18,6 +18,7 @@ The jscan decoder is expected to be a backward compatible drop-in replacement fo
 Roadmap:
 - [x] Primitive types
 - [x] Struct types
+    - [x] Type `struct{}`
 - [x] Slices
 - [x] Arrays
 - [x] Type `any`
