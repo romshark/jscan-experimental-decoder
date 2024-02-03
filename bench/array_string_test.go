@@ -88,7 +88,7 @@ func TestImplementationsDecodeArrayString(t *testing.T) {
 	t.Run("jscan", func(t *testing.T) {
 		d := jscandec.NewDecoder[[]byte, []string](jscan.NewTokenizer[[]byte](2048, 2048*1024))
 		var v []string
-		if err := d.Decode([]byte(in), &v); err.IsErr() {
+		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect, v)
@@ -97,7 +97,7 @@ func TestImplementationsDecodeArrayString(t *testing.T) {
 	t.Run("jscan_alt", func(t *testing.T) {
 		d := jscandec.NewDecoder[[]byte, []string](jscan.NewTokenizer[[]byte](2048, 2048*1024))
 		var v []string
-		if err := d.Decode([]byte(in), &v); err.IsErr() {
+		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect, v)
@@ -213,7 +213,7 @@ func BenchmarkDecodeArrayString12K(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v []string
-			if err := d.Decode(in, &v); err.IsErr() {
+			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
 				b.Fatal(err)
 			}
 		}

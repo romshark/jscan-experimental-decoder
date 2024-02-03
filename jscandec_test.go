@@ -7,6 +7,7 @@ import (
 	"math"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -27,20 +28,25 @@ var arrayStr1024 string
 var arrayFloat1024 string
 
 type DecoderIface[S []byte | string, T any] interface {
-	Decode(S, *T) jscandec.ErrorDecode
+	Decode(S, *T, *jscandec.DecodeOptions) jscandec.ErrorDecode
 }
 
 type testSetup[T any] struct {
+	decodeOptions *jscandec.DecodeOptions
 	decoderString DecoderIface[string, T]
 	decoderBytes  DecoderIface[[]byte, T]
 }
 
-func newTestSetup[T any]() testSetup[T] {
+func newTestSetup[T any](decodeOptions jscandec.DecodeOptions) testSetup[T] {
 	tokenizerString := jscan.NewTokenizer[string](16, 1024)
 	dStr := jscandec.NewDecoder[string, T](tokenizerString)
 	tokenizerBytes := jscan.NewTokenizer[[]byte](16, 1024)
 	dBytes := jscandec.NewDecoder[[]byte, T](tokenizerBytes)
-	return testSetup[T]{decoderString: dStr, decoderBytes: dBytes}
+	return testSetup[T]{
+		decodeOptions: &decodeOptions,
+		decoderString: dStr,
+		decoderBytes:  dBytes,
+	}
 }
 
 // testOK makes sure that input can be decoded to T successfully,
@@ -63,8 +69,12 @@ func (s testSetup[T]) testOK(t *testing.T, name, input string, expect ...T) {
 	t.Run(name+"/bytes", func(t *testing.T) {
 		t.Helper()
 		var std, actual T
-		require.NoError(t, json.Unmarshal([]byte(input), &std))
-		err := s.decoderBytes.Decode([]byte(input), &actual)
+		stdDec := json.NewDecoder(strings.NewReader(input))
+		if s.decodeOptions.DisallowUnknownFields {
+			stdDec.DisallowUnknownFields()
+		}
+		require.NoError(t, stdDec.Decode(&std), "error in encoding/json")
+		err := s.decoderBytes.Decode([]byte(input), &actual, s.decodeOptions)
 		if err.IsErr() {
 			t.Fatal(err.Error())
 		}
@@ -73,8 +83,12 @@ func (s testSetup[T]) testOK(t *testing.T, name, input string, expect ...T) {
 	t.Run(name+"/string", func(t *testing.T) {
 		t.Helper()
 		var std, actual T
-		require.NoError(t, json.Unmarshal([]byte(input), &std))
-		err := s.decoderString.Decode(input, &actual)
+		stdDec := json.NewDecoder(strings.NewReader(input))
+		if s.decodeOptions.DisallowUnknownFields {
+			stdDec.DisallowUnknownFields()
+		}
+		require.NoError(t, stdDec.Decode(&std), "error in encoding/json")
+		err := s.decoderString.Decode(input, &actual, s.decodeOptions)
 		if err.IsErr() {
 			t.Fatal(err.Error())
 		}
@@ -105,16 +119,24 @@ func (s testSetup[T]) testErrCheck(
 	t.Run(name+"/bytes", func(t *testing.T) {
 		t.Helper()
 		var std, v T
-		require.Error(t, json.Unmarshal([]byte(input), &std), "no error in encoding/json")
-		err := s.decoderBytes.Decode([]byte(input), &v)
+		stdDec := json.NewDecoder(strings.NewReader(input))
+		if s.decodeOptions.DisallowUnknownFields {
+			stdDec.DisallowUnknownFields()
+		}
+		require.Error(t, stdDec.Decode(&std), "no error in encoding/json")
+		err := s.decoderBytes.Decode([]byte(input), &v, s.decodeOptions)
 		check(t, err)
 		runtime.GC() // Make sure GC is happy
 	})
 	t.Run(name+"/string", func(t *testing.T) {
 		t.Helper()
 		var std, v T
-		require.Error(t, json.Unmarshal([]byte(input), &std), "no error in encoding/json")
-		err := s.decoderString.Decode(input, &v)
+		stdDec := json.NewDecoder(strings.NewReader(input))
+		if s.decodeOptions.DisallowUnknownFields {
+			stdDec.DisallowUnknownFields()
+		}
+		require.Error(t, stdDec.Decode(&std), "no error in encoding/json")
+		err := s.decoderString.Decode(input, &v, s.decodeOptions)
 		check(t, err)
 		runtime.GC() // Make sure GC is happy
 	})
@@ -123,13 +145,13 @@ func (s testSetup[T]) testErrCheck(
 func TestDecodeNil(t *testing.T) {
 	tokenizer := jscan.NewTokenizer[string](64, 1024)
 	d := jscandec.NewDecoder[string, [][]bool](tokenizer)
-	err := d.Decode(`"foo"`, nil)
+	err := d.Decode(`"foo"`, nil, jscandec.DefaultOptions)
 	require.True(t, err.IsErr())
 	require.Equal(t, jscandec.ErrNilDest, err.Err)
 }
 
 func TestDecodeBool(t *testing.T) {
-	s := newTestSetup[bool]()
+	s := newTestSetup[bool](*jscandec.DefaultOptions)
 	s.testOK(t, "true", `true`, true)
 	s.testOK(t, "false", `false`, false)
 
@@ -142,7 +164,7 @@ func TestDecodeBool(t *testing.T) {
 }
 
 func TestDecodeAny(t *testing.T) {
-	s := newTestSetup[any]()
+	s := newTestSetup[any](*jscandec.DefaultOptions)
 	s.testOK(t, "int_0", `0`, float64(0))
 	s.testOK(t, "int_42", `42`, float64(42))
 	s.testOK(t, "number", `3.1415`, float64(3.1415))
@@ -180,7 +202,7 @@ func TestDecodeAny(t *testing.T) {
 
 func TestDecodeUint(t *testing.T) {
 	require64bitSystem(t)
-	s := newTestSetup[uint]()
+	s := newTestSetup[uint](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "int32_max", `2147483647`, math.MaxInt32)
@@ -211,7 +233,7 @@ func TestDecodeUint(t *testing.T) {
 
 func TestDecodeInt(t *testing.T) {
 	require64bitSystem(t)
-	s := newTestSetup[int]()
+	s := newTestSetup[int](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -242,7 +264,7 @@ func TestDecodeInt(t *testing.T) {
 }
 
 func TestDecodeFloat32(t *testing.T) {
-	s := newTestSetup[float32]()
+	s := newTestSetup[float32](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -273,7 +295,7 @@ func TestDecodeFloat32(t *testing.T) {
 }
 
 func TestDecodeFloat64(t *testing.T) {
-	s := newTestSetup[float64]()
+	s := newTestSetup[float64](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -313,7 +335,7 @@ func TestDecodeFloat64(t *testing.T) {
 }
 
 func TestDecodeUint64(t *testing.T) {
-	s := newTestSetup[uint64]()
+	s := newTestSetup[uint64](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "int32_max", `2147483647`, math.MaxInt32)
@@ -340,7 +362,7 @@ func TestDecodeUint64(t *testing.T) {
 }
 
 func TestDecodeInt64(t *testing.T) {
-	s := newTestSetup[int64]()
+	s := newTestSetup[int64](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -365,7 +387,7 @@ func TestDecodeInt64(t *testing.T) {
 }
 
 func TestDecodeUint32(t *testing.T) {
-	s := newTestSetup[uint32]()
+	s := newTestSetup[uint32](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "max", `4294967295`, math.MaxUint32)
@@ -390,7 +412,7 @@ func TestDecodeUint32(t *testing.T) {
 }
 
 func TestDecodeInt32(t *testing.T) {
-	s := newTestSetup[int32]()
+	s := newTestSetup[int32](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -413,7 +435,7 @@ func TestDecodeInt32(t *testing.T) {
 }
 
 func TestDecodeUint16(t *testing.T) {
-	s := newTestSetup[uint16]()
+	s := newTestSetup[uint16](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "max", `65535`, math.MaxUint16)
@@ -438,7 +460,7 @@ func TestDecodeUint16(t *testing.T) {
 }
 
 func TestDecodeInt16(t *testing.T) {
-	s := newTestSetup[int16]()
+	s := newTestSetup[int16](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -461,7 +483,7 @@ func TestDecodeInt16(t *testing.T) {
 }
 
 func TestDecodeUint8(t *testing.T) {
-	s := newTestSetup[uint8]()
+	s := newTestSetup[uint8](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "max", `255`, math.MaxUint8)
@@ -486,7 +508,7 @@ func TestDecodeUint8(t *testing.T) {
 }
 
 func TestDecodeInt8(t *testing.T) {
-	s := newTestSetup[int8]()
+	s := newTestSetup[int8](*jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
 	s.testOK(t, "-1", `-1`, -1)
@@ -510,44 +532,60 @@ func TestDecodeInt8(t *testing.T) {
 
 func TestDecodeNull(t *testing.T) {
 	// Primitive types
-	newTestSetup[string]().testOK(t, "string", `null`, "")
-	newTestSetup[bool]().testOK(t, "bool", `null`, false)
-	newTestSetup[int]().testOK(t, "int", `null`, 0)
-	newTestSetup[int8]().testOK(t, "int8", `null`, 0)
-	newTestSetup[int16]().testOK(t, "int16", `null`, 0)
-	newTestSetup[int32]().testOK(t, "int32", `null`, 0)
-	newTestSetup[int64]().testOK(t, "int64", `null`, 0)
-	newTestSetup[uint]().testOK(t, "uint", `null`, 0)
-	newTestSetup[uint8]().testOK(t, "uint8", `null`, 0)
-	newTestSetup[uint16]().testOK(t, "uint16", `null`, 0)
-	newTestSetup[uint32]().testOK(t, "uint32", `null`, 0)
-	newTestSetup[uint64]().testOK(t, "uint64", `null`, 0)
-	newTestSetup[float32]().testOK(t, "float32", `null`, 0)
-	newTestSetup[float64]().testOK(t, "float64", `null`, 0)
+	newTestSetup[string](*jscandec.DefaultOptions).testOK(t, "string", `null`, "")
+	newTestSetup[bool](*jscandec.DefaultOptions).testOK(t, "bool", `null`, false)
+	newTestSetup[int](*jscandec.DefaultOptions).testOK(t, "int", `null`, 0)
+	newTestSetup[int8](*jscandec.DefaultOptions).testOK(t, "int8", `null`, 0)
+	newTestSetup[int16](*jscandec.DefaultOptions).testOK(t, "int16", `null`, 0)
+	newTestSetup[int32](*jscandec.DefaultOptions).testOK(t, "int32", `null`, 0)
+	newTestSetup[int64](*jscandec.DefaultOptions).testOK(t, "int64", `null`, 0)
+	newTestSetup[uint](*jscandec.DefaultOptions).testOK(t, "uint", `null`, 0)
+	newTestSetup[uint8](*jscandec.DefaultOptions).testOK(t, "uint8", `null`, 0)
+	newTestSetup[uint16](*jscandec.DefaultOptions).testOK(t, "uint16", `null`, 0)
+	newTestSetup[uint32](*jscandec.DefaultOptions).testOK(t, "uint32", `null`, 0)
+	newTestSetup[uint64](*jscandec.DefaultOptions).testOK(t, "uint64", `null`, 0)
+	newTestSetup[float32](*jscandec.DefaultOptions).testOK(t, "float32", `null`, 0)
+	newTestSetup[float64](*jscandec.DefaultOptions).testOK(t, "float64", `null`, 0)
 
 	// Slices
-	newTestSetup[[]bool]().testOK(t, "slice_bool", `null`, nil)
-	newTestSetup[[]string]().testOK(t, "slice_string", `null`, nil)
+	newTestSetup[[]bool](*jscandec.DefaultOptions).
+		testOK(t, "slice_bool", `null`, nil)
+	newTestSetup[[]string](*jscandec.DefaultOptions).
+		testOK(t, "slice_string", `null`, nil)
 
 	// Primitives in array
-	newTestSetup[[]bool]().testOK(t, "array_bool", `[null]`, []bool{false})
-	newTestSetup[[]string]().testOK(t, "array_string", `[null]`, []string{""})
-	newTestSetup[[]int]().testOK(t, "array_int", `[null]`, []int{0})
-	newTestSetup[[]int8]().testOK(t, "array_int8", `[null]`, []int8{0})
-	newTestSetup[[]int16]().testOK(t, "array_int16", `[null]`, []int16{0})
-	newTestSetup[[]int32]().testOK(t, "array_int32", `[null]`, []int32{0})
-	newTestSetup[[]int64]().testOK(t, "array_int64", `[null]`, []int64{0})
-	newTestSetup[[]uint]().testOK(t, "array_int", `[null]`, []uint{0})
-	newTestSetup[[]uint8]().testOK(t, "array_int8", `[null]`, []uint8{0})
-	newTestSetup[[]uint16]().testOK(t, "array_int16", `[null]`, []uint16{0})
-	newTestSetup[[]uint32]().testOK(t, "array_int32", `[null]`, []uint32{0})
-	newTestSetup[[]uint64]().testOK(t, "array_int64", `[null]`, []uint64{0})
-	newTestSetup[[]float32]().testOK(t, "array_float32", `[null]`, []float32{0})
-	newTestSetup[[]float64]().testOK(t, "array_float64", `[null]`, []float64{0})
+	newTestSetup[[]bool](*jscandec.DefaultOptions).
+		testOK(t, "array_bool", `[null]`, []bool{false})
+	newTestSetup[[]string](*jscandec.DefaultOptions).
+		testOK(t, "array_string", `[null]`, []string{""})
+	newTestSetup[[]int](*jscandec.DefaultOptions).
+		testOK(t, "array_int", `[null]`, []int{0})
+	newTestSetup[[]int8](*jscandec.DefaultOptions).
+		testOK(t, "array_int8", `[null]`, []int8{0})
+	newTestSetup[[]int16](*jscandec.DefaultOptions).
+		testOK(t, "array_int16", `[null]`, []int16{0})
+	newTestSetup[[]int32](*jscandec.DefaultOptions).
+		testOK(t, "array_int32", `[null]`, []int32{0})
+	newTestSetup[[]int64](*jscandec.DefaultOptions).
+		testOK(t, "array_int64", `[null]`, []int64{0})
+	newTestSetup[[]uint](*jscandec.DefaultOptions).
+		testOK(t, "array_int", `[null]`, []uint{0})
+	newTestSetup[[]uint8](*jscandec.DefaultOptions).
+		testOK(t, "array_int8", `[null]`, []uint8{0})
+	newTestSetup[[]uint16](*jscandec.DefaultOptions).
+		testOK(t, "array_int16", `[null]`, []uint16{0})
+	newTestSetup[[]uint32](*jscandec.DefaultOptions).
+		testOK(t, "array_int32", `[null]`, []uint32{0})
+	newTestSetup[[]uint64](*jscandec.DefaultOptions).
+		testOK(t, "array_int64", `[null]`, []uint64{0})
+	newTestSetup[[]float32](*jscandec.DefaultOptions).
+		testOK(t, "array_float32", `[null]`, []float32{0})
+	newTestSetup[[]float64](*jscandec.DefaultOptions).
+		testOK(t, "array_float64", `[null]`, []float64{0})
 }
 
 func TestDecodeString(t *testing.T) {
-	s := newTestSetup[string]()
+	s := newTestSetup[string](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `""`, "")
 	s.testOK(t, "spaces", `"   "`, "   ")
 	s.testOK(t, "hello_world", `"Hello World!"`, "Hello World!")
@@ -558,7 +596,7 @@ func TestDecodeString(t *testing.T) {
 
 func TestDecode2DSliceBool(t *testing.T) {
 	type T = [][]bool
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "3_2", `[[true],[false, true],[ ]]`, T{{true}, {false, true}, {}})
 	s.testOK(t, "2_1", `[[],[false]]`, T{{}, {false}})
 	s.testOK(t, "2_0", `[[],[]]`, T{{}, {}})
@@ -568,7 +606,7 @@ func TestDecode2DSliceBool(t *testing.T) {
 
 func TestDecodeSliceString(t *testing.T) {
 	type T = []string
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "3", `[ "a", "ab", "cde" ]`, T{"a", "ab", "cde"})
 	s.testOK(t, "2", `[ "abc" ]`, T{"abc"})
 	s.testOK(t, "0", `[]`, T{})
@@ -577,7 +615,7 @@ func TestDecodeSliceString(t *testing.T) {
 
 func TestDecodeSliceFloat32(t *testing.T) {
 	type T = []float32
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
 	s.testOK(t, "2", `[ 0 ]`, T{0})
 	s.testOK(t, "0", `[]`, T{})
@@ -586,7 +624,7 @@ func TestDecodeSliceFloat32(t *testing.T) {
 
 func TestDecodeSliceFloat64(t *testing.T) {
 	type T = []float64
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
 	s.testOK(t, "2", `[ 0 ]`, T{0})
 	s.testOK(t, "2", `[ 9007199254740991 ]`, T{9_007_199_254_740_991})
@@ -596,7 +634,7 @@ func TestDecodeSliceFloat64(t *testing.T) {
 
 func TestDecode2DSliceInt(t *testing.T) {
 	type T = [][]int
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "3_2", `[[0],[12, 123],[ ]]`, T{{0}, {12, 123}, {}})
 	s.testOK(t, "2_1", `[[],[-12345678]]`, T{{}, {-12_345_678}})
 	s.testOK(t, "2_0", `[[],[]]`, T{{}, {}})
@@ -605,7 +643,7 @@ func TestDecode2DSliceInt(t *testing.T) {
 
 func TestDecodeMatrix2Int(t *testing.T) {
 	type T = [2][2]int
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "complete",
 		`[[0,1],[2,3]]`,
 		T{{0, 1}, {2, 3}})
@@ -625,7 +663,7 @@ func TestDecodeMatrix2Int(t *testing.T) {
 
 func TestDecodeMatrix4Int(t *testing.T) {
 	type T = [4][4]int
-	s := newTestSetup[T]()
+	s := newTestSetup[T](*jscandec.DefaultOptions)
 	s.testOK(t, "complete",
 		`[[0,1,2,3],[4,5,6,7],[8,9,10,11],[12,13,14,15]]`,
 		T{{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}})
@@ -645,7 +683,7 @@ func TestDecodeStruct(t *testing.T) {
 		Foo int    `json:"foo"`
 		Bar string `json:"bar"`
 	}
-	s := newTestSetup[S]()
+	s := newTestSetup[S](*jscandec.DefaultOptions)
 	s.testOK(t, "regular_field_order",
 		`{"foo":42,"bar":"bazz"}`, S{Foo: 42, Bar: "bazz"})
 	s.testOK(t, "reversed_field_order",
@@ -676,13 +714,53 @@ func TestDecodeStruct(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeStructErrUknownField(t *testing.T) {
+	type S struct {
+		Foo int    `json:"foo"`
+		Bar string `json:"bar"`
+	}
+	s := newTestSetup[S](jscandec.DecodeOptions{DisallowUnknownFields: true})
+	s.testOK(t, "regular_field_order",
+		`{"foo":42,"bar":"bazz"}`, S{Foo: 42, Bar: "bazz"})
+	s.testOK(t, "reversed_field_order",
+		`{"bar":"abc","foo":1234}`, S{Foo: 1234, Bar: "abc"})
+	s.testOK(t, "case_insensitive_match1",
+		`{"FOO":42,"BAR":"bazz"}`, S{Foo: 42, Bar: "bazz"})
+	s.testOK(t, "case_insensitive_match2",
+		`{"Foo":42,"Bar":"bazz"}`, S{Foo: 42, Bar: "bazz"})
+	s.testOK(t, "null_fields", `{"foo":null,"bar":null}`, S{Foo: 0, Bar: ""})
+
+	s.testOK(t, "missing_field_foo",
+		`{"bar":"bar"}`, S{Bar: "bar"})
+	s.testOK(t, "missing_field_bar",
+		`{"foo":12345}`, S{Foo: 12345})
+
+	s.testOK(t, "empty", `{}`, S{})
+
+	s.testErr(t, "unknown_field",
+		`{"bar":"bar","unknown":42,"foo":102}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnknownField, Index: 13})
+	s.testErr(t, "unknown_fields_only",
+		`{"unknown":42, "unknown2": "bad"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnknownField, Index: 1})
+	s.testErr(t, "name_mismatch", `{"faz":42,"baz":"bazz"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnknownField, Index: 1})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeStructFields(t *testing.T) {
 	type S struct {
 		Any   any
 		Map   map[string]any
 		Slice []any
 	}
-	s := newTestSetup[S]()
+	s := newTestSetup[S](*jscandec.DefaultOptions)
 	s.testOK(t, "case_insensitive_match",
 		`{"any":42,"Map":{"foo":"bar"},"SLICE":[1,false,"x"]}`,
 		S{
@@ -721,7 +799,7 @@ func TestDecodeStructFields(t *testing.T) {
 }
 
 func TestDecodePointerInt(t *testing.T) {
-	s := newTestSetup[*int]()
+	s := newTestSetup[*int](*jscandec.DefaultOptions)
 	s.testOK(t, "valid", `42`, Ptr(int(42)))
 
 	s.testErr(t, "float", `1.1`,
@@ -737,7 +815,7 @@ func TestDecodePointerStruct(t *testing.T) {
 		Foo string `json:"foo"`
 		Bar any    `json:"bar"`
 	}
-	s := newTestSetup[*S]()
+	s := newTestSetup[*S](*jscandec.DefaultOptions)
 	s.testOK(t, "valid", `{"foo":"™","bar":[1,true]}`, &S{
 		Foo: "™",
 		Bar: []any{float64(1), true},
@@ -752,7 +830,7 @@ func TestDecodePointerStruct(t *testing.T) {
 }
 
 func TestDecodePointerAny(t *testing.T) {
-	s := newTestSetup[*any]()
+	s := newTestSetup[*any](*jscandec.DefaultOptions)
 	s.testOK(t, "int", `[1]`, Ptr(any([]any{float64(1)})))
 	s.testOK(t, "string", `"text"`, Ptr(any("text")))
 	s.testOK(t, "array_int", `[1]`, Ptr(any([]any{float64(1)})))
@@ -760,7 +838,7 @@ func TestDecodePointerAny(t *testing.T) {
 }
 
 func TestDecodePointer3DInt(t *testing.T) {
-	s := newTestSetup[***int]()
+	s := newTestSetup[***int](*jscandec.DefaultOptions)
 	s.testOK(t, "valid", `42`, Ptr(Ptr(Ptr(int(42)))))
 
 	s.testErr(t, "float", `1.1`,
@@ -778,7 +856,7 @@ func TestDecodeStructSlice(t *testing.T) {
 		Foo int    `json:"foo"`
 		Bar string `json:"bar"`
 	}
-	s := newTestSetup[[]S]()
+	s := newTestSetup[[]S](*jscandec.DefaultOptions)
 	s.testOK(t, "empty_array",
 		`[]`, []S{})
 	s.testOK(t, "regular_field_order",
@@ -840,7 +918,7 @@ func TestDecodeStructSlice(t *testing.T) {
 
 func TestDecodeMapStringToString(t *testing.T) {
 	type M map[string]string
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "2_pairs",
 		`{"foo":"42","bar":"bazz"}`, M{"foo": "42", "bar": "bazz"})
@@ -875,7 +953,7 @@ func TestDecodeMapStringToString(t *testing.T) {
 
 func TestDecodeMapIntToString(t *testing.T) {
 	type M map[int]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "-123456789":123456789}`,
@@ -899,7 +977,7 @@ func TestDecodeMapIntToString(t *testing.T) {
 
 func TestDecodeMapInt8ToString(t *testing.T) {
 	type M map[int8]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "min_and_max", `{"0":0, "-128":-128, "127":127}`,
@@ -923,7 +1001,7 @@ func TestDecodeMapInt8ToString(t *testing.T) {
 
 func TestDecodeMapInt16ToString(t *testing.T) {
 	type M map[int16]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "min_and_max", `{"0":0, "-32768":-32768, "32767":32767}`,
@@ -947,7 +1025,7 @@ func TestDecodeMapInt16ToString(t *testing.T) {
 
 func TestDecodeMapInt32ToString(t *testing.T) {
 	type M map[int32]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "min_and_max", `{"0":0,
@@ -972,7 +1050,7 @@ func TestDecodeMapInt32ToString(t *testing.T) {
 
 func TestDecodeMapInt64ToString(t *testing.T) {
 	type M map[int64]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "min_and_max", `{"0":0,
@@ -1002,7 +1080,7 @@ func TestDecodeMapInt64ToString(t *testing.T) {
 
 func TestDecodeMapUintToString(t *testing.T) {
 	type M map[uint]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
@@ -1026,7 +1104,7 @@ func TestDecodeMapUintToString(t *testing.T) {
 
 func TestDecodeMapUint8ToString(t *testing.T) {
 	type M map[uint8]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "255":1}`,
@@ -1050,7 +1128,7 @@ func TestDecodeMapUint8ToString(t *testing.T) {
 
 func TestDecodeMapUint16ToString(t *testing.T) {
 	type M map[uint16]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "65535":1}`,
@@ -1074,7 +1152,7 @@ func TestDecodeMapUint16ToString(t *testing.T) {
 
 func TestDecodeMapUint32ToString(t *testing.T) {
 	type M map[uint32]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "4294967295":1}`,
@@ -1098,7 +1176,7 @@ func TestDecodeMapUint32ToString(t *testing.T) {
 
 func TestDecodeMapUint64ToString(t *testing.T) {
 	type M map[uint64]int
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "null", `null`, M(nil))
 	s.testOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
@@ -1123,7 +1201,7 @@ func TestDecodeMapUint64ToString(t *testing.T) {
 func TestDecodeMapStringToMapStringToString(t *testing.T) {
 	type M2 map[string]string
 	type M map[string]M2
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "2_pairs",
 		`{
@@ -1178,7 +1256,7 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 		ID   int    `json:"id"`
 	}
 	type M map[string]S
-	s := newTestSetup[M]()
+	s := newTestSetup[M](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, M{})
 	s.testOK(t, "one",
 		`{"x":{"name":"first","id":1}}`, M{"x": S{Name: "first", ID: 1}})
@@ -1208,7 +1286,7 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 }
 
 func TestDecodeJSONUnmarshaler(t *testing.T) {
-	s := newTestSetup[jsonUnmarshalerImpl]()
+	s := newTestSetup[jsonUnmarshalerImpl](*jscandec.DefaultOptions)
 	s.testOK(t, "integer", `123`, jsonUnmarshalerImpl{Value: `123`})
 	s.testOK(t, "float", `3.14`, jsonUnmarshalerImpl{Value: `3.14`})
 	s.testOK(t, "string", `"okay"`, jsonUnmarshalerImpl{Value: `"okay"`})
@@ -1224,7 +1302,7 @@ func TestDecodeJSONUnmarshaler(t *testing.T) {
 }
 
 func TestDecodeTextUnmarshaler(t *testing.T) {
-	s := newTestSetup[textUnmarshalerImpl]()
+	s := newTestSetup[textUnmarshalerImpl](*jscandec.DefaultOptions)
 	s.testOK(t, "string", `"text"`, textUnmarshalerImpl{Value: `text`})
 	s.testOK(t, "string_escaped", `"\"text\""`, textUnmarshalerImpl{Value: `"text"`})
 	s.testOK(t, "null", `null`, textUnmarshalerImpl{Value: ``})
@@ -1252,7 +1330,7 @@ func TestDecodeTextUnmarshaler(t *testing.T) {
 
 func TestDecodeTextUnmarshalerMapKey(t *testing.T) {
 	type U = textUnmarshalerImpl
-	s := newTestSetup[map[U]int]()
+	s := newTestSetup[map[U]int](*jscandec.DefaultOptions)
 	s.testOK(t, "empty", `{}`, map[U]int{})
 	s.testOK(t, "null", `null`, map[U]int(nil))
 	s.testOK(t, "text", `{"text":1}`, map[U]int{{Value: "text"}: 1})
@@ -1285,7 +1363,7 @@ func TestDecodeUnmarshalerFields(t *testing.T) {
 		Text   textUnmarshalerImpl `json:"text"`
 		Tail   []int               `json:"tail"`
 	}
-	s := newTestSetup[S]()
+	s := newTestSetup[S](*jscandec.DefaultOptions)
 	s.testOK(t, "integer",
 		`{"string":"a","json":42,"text":"foo","tail":[1,2]}`,
 		S{
@@ -1322,7 +1400,7 @@ func TestDecodeUnmarshalerFields(t *testing.T) {
 }
 
 func TestDecodeJSONUnmarshalerErr(t *testing.T) {
-	s := newTestSetup[unmarshalerImplErr]()
+	s := newTestSetup[unmarshalerImplErr](*jscandec.DefaultOptions)
 	s.testErrCheck(t, "integer", `123`, func(t *testing.T, err jscandec.ErrorDecode) {
 		require.Equal(t, errUnmarshalerImplErr, err.Err)
 	})
@@ -1337,7 +1415,7 @@ func BenchmarkSmall(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v [][]bool
-			if err := d.Decode(in, &v); err.IsErr() {
+			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
 				b.Fatal(err)
 			}
 		}

@@ -93,7 +93,7 @@ func TestImplementationsStruct3(t *testing.T) {
 			jscan.NewTokenizer[[]byte](32, len(in)/2),
 		)
 		var v bench.Struct3
-		if err := d.Decode([]byte(in), &v); err.IsErr() {
+		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -216,7 +216,7 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 		var v bench.Struct3
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
-			if err := d.Decode(in, &v); err.IsErr() {
+			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
 				b.Fatal(err)
 			}
 		}

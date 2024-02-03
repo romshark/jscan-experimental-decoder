@@ -26,7 +26,7 @@ Roadmap:
     - [x] `encoding.TextUnmarshaler` keys
     - [x] Integer keys
 - [ ] JSON struct tags
-    - [ ] Option `DisallowUnknownFields`
+    - [x] Option `DisallowUnknownFields`
     - [x] Case-insensitive key matching
     - [ ] Option `string`
 - [x] Pointers

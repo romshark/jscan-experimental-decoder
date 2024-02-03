@@ -20,6 +20,7 @@ import (
 var (
 	ErrNilDest         = errors.New("decoding to nil pointer")
 	ErrUnexpectedValue = errors.New("unexpected value")
+	ErrUnknownField    = errors.New("unknown field")
 	ErrIntegerOverflow = errors.New("integer overflow")
 )
 
@@ -179,6 +180,10 @@ type stackFrame[S []byte | string] struct {
 	OptionString bool // TODO: implement support
 }
 
+var DefaultOptions = &DecodeOptions{
+	DisallowUnknownFields: false,
+}
+
 // Unmarshal dynamically allocates new decoder and tokenizer instances and
 // unmarshals the JSON contents of s into t.
 // Unmarshal is primarily a drop-in replacement for the standard encoding/json.Unmarshal
@@ -195,7 +200,7 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 		len(stack)+1, len(s)/2,
 	)
 	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
-	if err := d.Decode(s, t); err.IsErr() {
+	if err := d.Decode(s, t, DefaultOptions); err.IsErr() {
 		return err.Err
 	}
 	return nil
@@ -505,11 +510,24 @@ func determineTextUnmarshalerSupport(t reflect.Type) interfaceSupport {
 	return interfaceSupportNone
 }
 
+type DecodeOptions struct {
+	DisallowUnknownFields bool
+}
+
 // Decode unmarshals the JSON contents of s into t.
 // When S is string the decoder will not copy string values and will instead refer
 // to the source string instead since Go strings are guaranteed to be immutable.
 // When S is []byte all strings are copied.
-func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
+//
+// Tip: To improve performance reducing dynamic memory allocations define
+// options as a variable and pass the pointer. Don't initialize it like this:
+//
+//	d.Decode(input, &v, &jscandec.DecodeOptions{DisallowUnknownFields: true})
+//
+// allocate the options to a variable and pass the variable instead:
+//
+//	d.Decode(input, &v, predefinedOptions)
+func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDecode) {
 	defer func() {
 		for i := range d.stackExp {
 			d.stackExp[i].Dest = nil
@@ -1108,7 +1126,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T) (err ErrorDecode) {
 						key := unescape.Valid[S, string](tv)
 						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
 						if frameIndex == -1 {
-							// TODO: return error when option for unknown fields is enabled
+							if options.DisallowUnknownFields {
+								err = ErrorDecode{
+									Err:   ErrUnknownField,
+									Index: tokens[ti].Index,
+								}
+								return true
+							}
 							// Skip value, go to the next key
 							ti++
 							for l := 0; ; ti++ {
