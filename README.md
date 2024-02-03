@@ -26,10 +26,10 @@ Roadmap:
     - [x] `string` keys
     - [x] `encoding.TextUnmarshaler` keys
     - [x] Integer keys
-- [ ] JSON struct tags
+- [x] JSON struct tags
     - [x] Option `DisallowUnknownFields`
     - [x] Case-insensitive key matching
-    - [ ] Option `string`
+    - [x] Option `string`
 - [x] Pointers
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`

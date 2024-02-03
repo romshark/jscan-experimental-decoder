@@ -85,7 +85,10 @@ func TestImplementationsDecodeArrayInt(t *testing.T) {
 	})
 
 	t.Run("jscan", func(t *testing.T) {
-		d := jscandec.NewDecoder[[]byte, []int](jscan.NewTokenizer[[]byte](2048, 2048*1024))
+		d, err := jscandec.NewDecoder[[]byte, []int](
+			jscan.NewTokenizer[[]byte](2048, 2048*1024),
+		)
+		require.NoError(t, err)
 		var v []int
 		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
@@ -94,7 +97,10 @@ func TestImplementationsDecodeArrayInt(t *testing.T) {
 	})
 
 	t.Run("jscan_alt", func(t *testing.T) {
-		d := jscandec.NewDecoder[[]byte, []int](jscan.NewTokenizer[[]byte](2048, 2048*1024))
+		d, err := jscandec.NewDecoder[[]byte, []int](
+			jscan.NewTokenizer[[]byte](2048, 2048*1024),
+		)
+		require.NoError(t, err)
 		var v []int
 		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
@@ -208,7 +214,10 @@ func BenchmarkDecodeArrayInt12K(b *testing.B) {
 
 	b.Run("jscan_decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		d := jscandec.NewDecoder[[]byte, []int](tokenizer)
+		d, err := jscandec.NewDecoder[[]byte, []int](tokenizer)
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v []int

@@ -1,6 +1,7 @@
 package jscandec
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,9 @@ import (
 )
 
 var (
+	ErrStringTagOptionOnUnsupportedType = errors.New(
+		"invalid use of the `string` tag option on unsupported type",
+	)
 	ErrNilDest         = errors.New("decoding to nil pointer")
 	ErrUnexpectedValue = errors.New("unexpected value")
 	ErrUnknownField    = errors.New("unknown field")
@@ -69,6 +73,21 @@ const (
 	ExpectTypeUint16
 	ExpectTypeUint32
 	ExpectTypeUint64
+
+	ExpectTypeBoolString
+	ExpectTypeStrString
+	ExpectTypeFloat32String
+	ExpectTypeFloat64String
+	ExpectTypeIntString
+	ExpectTypeInt8String
+	ExpectTypeInt16String
+	ExpectTypeInt32String
+	ExpectTypeInt64String
+	ExpectTypeUintString
+	ExpectTypeUint8String
+	ExpectTypeUint16String
+	ExpectTypeUint32String
+	ExpectTypeUint64String
 )
 
 func (t ExpectType) String() string {
@@ -119,6 +138,34 @@ func (t ExpectType) String() string {
 		return "uint32"
 	case ExpectTypeUint64:
 		return "uint64"
+	case ExpectTypeBoolString:
+		return "string(boolean)"
+	case ExpectTypeStrString:
+		return "string(string)"
+	case ExpectTypeFloat32String:
+		return "string(float32)"
+	case ExpectTypeFloat64String:
+		return "string(float64)"
+	case ExpectTypeIntString:
+		return "string(int)"
+	case ExpectTypeInt8String:
+		return "string(int8)"
+	case ExpectTypeInt16String:
+		return "string(int16)"
+	case ExpectTypeInt32String:
+		return "string(int32)"
+	case ExpectTypeInt64String:
+		return "string(int64)"
+	case ExpectTypeUintString:
+		return "string(uint)"
+	case ExpectTypeUint8String:
+		return "string(uint8)"
+	case ExpectTypeUint16String:
+		return "string(uint16)"
+	case ExpectTypeUint32String:
+		return "string(uint32)"
+	case ExpectTypeUint64String:
+		return "string(uint64)"
 	}
 	return ""
 }
@@ -178,9 +225,6 @@ type stackFrame[S []byte | string] struct {
 
 	// ParentFrameIndex defines the index of the composite parent object in the stack.
 	ParentFrameIndex int
-
-	// OptionString defines whether the `json:",string"` option was specified.
-	OptionString bool // TODO: implement support
 }
 
 var DefaultOptions = &DecodeOptions{
@@ -198,7 +242,11 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 		return ErrNilDest
 	}
 	stack := make([]stackFrame[S], 0, 4)
-	stack = appendTypeToStack(stack, reflect.TypeOf(*t))
+	var err error
+	stack, err = appendTypeToStack(stack, reflect.TypeOf(*t))
+	if err != nil {
+		return err
+	}
 	tokenizer := jscan.NewTokenizer[S](
 		len(stack)+1, len(s)/2,
 	)
@@ -219,42 +267,47 @@ type Decoder[S []byte | string, T any] struct {
 // In case there are multiple decoder instances for different types of T,
 // tokenizer is recommended to be shared across them, yet the decoders must
 // not be used concurrently!
-func NewDecoder[S []byte | string, T any](tokenizer *jscan.Tokenizer[S]) *Decoder[S, T] {
+func NewDecoder[S []byte | string, T any](
+	tokenizer *jscan.Tokenizer[S],
+) (*Decoder[S, T], error) {
 	d := &Decoder[S, T]{
 		tokenizer: tokenizer,
 		stackExp:  make([]stackFrame[S], 0, 4),
 	}
 
 	var z T
-	d.stackExp = appendTypeToStack(d.stackExp, reflect.TypeOf(z))
-
-	return d
+	var err error
+	d.stackExp, err = appendTypeToStack(d.stackExp, reflect.TypeOf(z))
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // appendTypeToStack will recursively flat-append stack frames recursing into t.
 func appendTypeToStack[S []byte | string](
 	stack []stackFrame[S], t reflect.Type,
-) []stackFrame[S] {
+) ([]stackFrame[S], error) {
 	if t == nil {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeAny,
 			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
 			ParentFrameIndex: len(stack) - 1,
-		})
+		}), nil
 	} else if s := determineJSONUnmarshalerSupport(t); s != interfaceSupportNone {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeJSONUnmarshaler,
 			RType:            t,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
-		})
+		}), nil
 	} else if s := determineTextUnmarshalerSupport(t); s != interfaceSupportNone {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeTextUnmarshaler,
 			RType:            t,
 			Size:             t.Size(),
 			ParentFrameIndex: len(stack) - 1,
-		})
+		}), nil
 	}
 	switch t.Kind() {
 	case reflect.Interface:
@@ -266,7 +319,7 @@ func appendTypeToStack[S []byte | string](
 			Type:             ExpectTypeAny,
 			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
 			ParentFrameIndex: len(stack) - 1,
-		})
+		}), nil
 	case reflect.Array:
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame[S]{
@@ -275,7 +328,10 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: len(stack) - 1,
 		})
 		newAtIndex := len(stack)
-		stack = appendTypeToStack(stack, t.Elem())
+		var err error
+		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+			return nil, err
+		}
 
 		// Link array element to the array frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
@@ -288,7 +344,10 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: len(stack) - 1,
 		})
 		newAtIndex := len(stack)
-		stack = appendTypeToStack(stack, t.Elem())
+		var err error
+		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+			return nil, err
+		}
 
 		// Link slice element to the slice frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
@@ -305,13 +364,19 @@ func appendTypeToStack[S []byte | string](
 		})
 		{
 			newAtIndex := len(stack)
-			stack = appendTypeToStack(stack, t.Key())
+			var err error
+			if stack, err = appendTypeToStack(stack, t.Key()); err != nil {
+				return nil, err
+			}
 			// Link map key to the map frame.
 			stack[newAtIndex].ParentFrameIndex = parentIndex
 		}
 		{
 			newAtIndex := len(stack)
-			stack = appendTypeToStack(stack, t.Elem())
+			var err error
+			if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+				return nil, err
+			}
 			// Link map value to the map frame.
 			stack[newAtIndex].ParentFrameIndex = parentIndex
 		}
@@ -324,7 +389,7 @@ func appendTypeToStack[S []byte | string](
 				Size:             t.Size(),
 				Type:             ExpectTypeEmptyStruct,
 				ParentFrameIndex: len(stack) - 1,
-			})
+			}), nil
 		}
 		stack = append(stack, stackFrame[S]{
 			Fields:           make([]fieldStackFrame, 0, numFields),
@@ -355,7 +420,11 @@ func appendTypeToStack[S []byte | string](
 			}
 
 			newAtIndex := len(stack)
-			stack = appendTypeToStack(stack, f.Type)
+			var err error
+			stack, err = appendTypeToStack(stack, f.Type)
+			if err != nil {
+				return nil, err
+			}
 			stack[parentIndex].Fields = append(
 				stack[parentIndex].Fields,
 				fieldStackFrame{
@@ -370,8 +439,41 @@ func appendTypeToStack[S []byte | string](
 			// Link the field frame to the parent struct frame.
 			stack[newAtIndex].ParentFrameIndex = parentIndex
 
-			// Set `string` option if defined.
-			stack[newAtIndex].OptionString = optionString
+			if optionString {
+				switch stack[newAtIndex].Type {
+				case ExpectTypeStr:
+					stack[newAtIndex].Type = ExpectTypeStrString
+				case ExpectTypeBool:
+					stack[newAtIndex].Type = ExpectTypeBoolString
+				case ExpectTypeFloat32:
+					stack[newAtIndex].Type = ExpectTypeFloat32String
+				case ExpectTypeFloat64:
+					stack[newAtIndex].Type = ExpectTypeFloat64String
+				case ExpectTypeInt:
+					stack[newAtIndex].Type = ExpectTypeIntString
+				case ExpectTypeInt8:
+					stack[newAtIndex].Type = ExpectTypeInt8String
+				case ExpectTypeInt16:
+					stack[newAtIndex].Type = ExpectTypeInt16String
+				case ExpectTypeInt32:
+					stack[newAtIndex].Type = ExpectTypeInt32String
+				case ExpectTypeInt64:
+					stack[newAtIndex].Type = ExpectTypeInt64String
+				case ExpectTypeUint:
+					stack[newAtIndex].Type = ExpectTypeUintString
+				case ExpectTypeUint8:
+					stack[newAtIndex].Type = ExpectTypeUint8String
+				case ExpectTypeUint16:
+					stack[newAtIndex].Type = ExpectTypeUint16String
+				case ExpectTypeUint32:
+					stack[newAtIndex].Type = ExpectTypeUint32String
+				case ExpectTypeUint64:
+					stack[newAtIndex].Type = ExpectTypeUint64String
+				default:
+					// Using tag option `string` on an unsupported type
+					return nil, ErrStringTagOptionOnUnsupportedType
+				}
+			}
 		}
 
 	case reflect.Bool:
@@ -466,13 +568,16 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: len(stack) - 1,
 		})
 		newAtIndex := len(stack)
-		stack = appendTypeToStack(stack, t.Elem())
+		var err error
+		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+			return nil, err
+		}
 		stack[newAtIndex].ParentFrameIndex = parentIndex
 
 	default:
-		panic(fmt.Errorf("TODO: unsupported type: %v", t))
+		return nil, fmt.Errorf("unsupported type: %v", t)
 	}
-	return stack
+	return stack, nil
 }
 
 var (
@@ -586,42 +691,38 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 		}
 	}
 
-	fnA2F32 := func(s S, dest unsafe.Pointer) error {
+	fnA2F32 := func(s S) (float32, error) {
 		v, err := strconv.ParseFloat(string(s), 32)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		*(*float32)(dest) = float32(v)
-		return nil
+		return float32(v), nil
 	}
-	fnA2F64 := func(s S, dest unsafe.Pointer) error {
+	fnA2F64 := func(s S) (float64, error) {
 		v, err := strconv.ParseFloat(string(s), 64)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		*(*float64)(dest) = v
-		return nil
+		return v, nil
 	}
 	var sz S
 	if _, ok := any(sz).([]byte); ok {
 		// Avoid copying the slice data
-		fnA2F32 = func(s S, dest unsafe.Pointer) error {
+		fnA2F32 = func(s S) (float32, error) {
 			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
 			v, err := strconv.ParseFloat(su, 32)
 			if err != nil {
-				return err
+				return 0, err
 			}
-			*(*float32)(dest) = float32(v)
-			return nil
+			return float32(v), nil
 		}
-		fnA2F64 = func(s S, dest unsafe.Pointer) error {
+		fnA2F64 = func(s S) (float64, error) {
 			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
 			v, err := strconv.ParseFloat(su, 64)
 			if err != nil {
-				return err
+				return 0, err
 			}
-			*(*float64)(dest) = v
-			return nil
+			return v, nil
 		}
 	}
 
@@ -856,17 +957,21 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeFloat32:
 					p := dest()
-					if e := fnA2F32(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
-						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
+					v, errParse := fnA2F32(s[tokens[ti].Index:tokens[ti].End])
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
 					}
+					*(*float32)(p) = v
 
 				case ExpectTypeFloat64:
 					p := dest()
-					if e := fnA2F64(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
-						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
+					v, errParse := fnA2F64(s[tokens[ti].Index:tokens[ti].End])
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
 					}
+					*(*float64)(p) = v
 
 				default:
 					err = ErrorDecode{
@@ -905,16 +1010,20 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeFloat32:
 					p := dest()
-					if e := fnA2F32(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
-						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
+					v, errParse := fnA2F32(s[tokens[ti].Index:tokens[ti].End])
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
 					}
+					*(*float32)(p) = v
 				case ExpectTypeFloat64:
 					p := dest()
-					if e := fnA2F64(s[tokens[ti].Index:tokens[ti].End], p); e != nil {
-						err = ErrorDecode{Err: e, Index: tokens[ti].Index}
+					v, errParse := fnA2F64(s[tokens[ti].Index:tokens[ti].End])
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
 					}
+					*(*float64)(p) = v
 				default:
 					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
 					return true
@@ -948,6 +1057,270 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeStr:
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					*(*string)(p) = unescape.Valid[S, string](tv)
+				case ExpectTypeBoolString:
+					switch string(s[tokens[ti].Index+1 : tokens[ti].End-1]) {
+					case "true":
+						*(*bool)(p) = true
+					case "false":
+						*(*bool)(p) = false
+					default:
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+				case ExpectTypeStrString:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					if len(tv) < len(`\"\"`) ||
+						string(tv[0:2]) != `\"` ||
+						string(tv[len(tv)-2:]) != `\"` {
+						// Too short or not encloused by \"
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					val := tv[2 : len(tv)-2]
+					var indexReverseSolidus int
+					switch val := any(val).(type) {
+					case string:
+						indexReverseSolidus = strings.IndexByte(val, '\\')
+					case []byte:
+						indexReverseSolidus = bytes.IndexByte(val, '\\')
+					}
+					if indexReverseSolidus != -1 {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*string)(p) = string(val)
+
+				case ExpectTypeFloat32String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc == jsonnum.ReturnCodeErr {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, errParse := fnA2F32(tv)
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						return true
+					}
+					*(*float32)(p) = v
+				case ExpectTypeFloat64String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc == jsonnum.ReturnCodeErr {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, errParse := fnA2F64(tv)
+					if errParse != nil {
+						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						return true
+					}
+					*(*float64)(p) = v
+				case ExpectTypeIntString:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, errParse := fnA2I(tv)
+					if errParse != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*int)(p) = v
+				case ExpectTypeInt8String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.I8(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*int8)(p) = v
+				case ExpectTypeInt16String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.I16(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*int16)(p) = v
+				case ExpectTypeInt32String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.I32(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*int32)(p) = v
+				case ExpectTypeInt64String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.I64(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*int64)(p) = v
+				case ExpectTypeUintString:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, errParse := fnA2UI(tv)
+					if errParse != nil {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*uint)(p) = v
+				case ExpectTypeUint8String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.U8(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*uint8)(p) = v
+				case ExpectTypeUint16String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.U16(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*uint16)(p) = v
+				case ExpectTypeUint32String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.U32(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*uint32)(p) = v
+				case ExpectTypeUint64String:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					_, rc := jsonnum.ReadNumber(tv)
+					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					v, overflow := atoi.U64(tv)
+					if overflow {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*uint64)(p) = v
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,

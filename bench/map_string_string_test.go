@@ -77,7 +77,10 @@ func TestImplementationsMapStringString(t *testing.T) {
 	})
 
 	t.Run("jscan/decoder", func(t *testing.T) {
-		d := jscandec.NewDecoder[[]byte, map[string]string](jscan.NewTokenizer[[]byte](2048, 2048*1024))
+		d, err := jscandec.NewDecoder[[]byte, map[string]string](
+			jscan.NewTokenizer[[]byte](2048, 2048*1024),
+		)
+		require.NoError(t, err)
 		var v map[string]string
 		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
 			t.Fatal(err)
@@ -185,7 +188,10 @@ func BenchmarkDecodeMapStringString(b *testing.B) {
 
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		d := jscandec.NewDecoder[[]byte, map[string]string](tokenizer)
+		d, err := jscandec.NewDecoder[[]byte, map[string]string](tokenizer)
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v map[string]string

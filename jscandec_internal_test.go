@@ -37,6 +37,48 @@ func TestAppendTypeToStack(t *testing.T) {
 		Unmarshaler *testImplJSONUnmarshaler `json:"unmar"`
 		Tail        []int                    `json:"tail"`
 	}
+	type SStringString struct {
+		String string `json:",string"`
+	}
+	type SStringBool struct {
+		Bool bool `json:",string"`
+	}
+	type SStringFloat32 struct {
+		Float32 float32 `json:",string"`
+	}
+	type SStringFloat64 struct {
+		Float64 float64 `json:",string"`
+	}
+	type SStringInt struct {
+		Int int `json:",string"`
+	}
+	type SStringInt8 struct {
+		Int8 int8 `json:",string"`
+	}
+	type SStringInt16 struct {
+		Int16 int16 `json:",string"`
+	}
+	type SStringInt32 struct {
+		Int32 int32 `json:",string"`
+	}
+	type SStringInt64 struct {
+		Int64 int64 `json:",string"`
+	}
+	type SStringUint struct {
+		Uint uint `json:",string"`
+	}
+	type SStringUint8 struct {
+		Uint8 uint8 `json:",string"`
+	}
+	type SStringUint16 struct {
+		Uint16 uint16 `json:",string"`
+	}
+	type SStringUint32 struct {
+		Uint32 uint32 `json:",string"`
+	}
+	type SStringUint64 struct {
+		Uint64 uint64 `json:",string"`
+	}
 
 	tpS3 := reflect.TypeOf(S3{})
 	tpS4 := reflect.TypeOf(S4{})
@@ -794,9 +836,280 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: SStringString{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "String"},
+					},
+					Size:             reflect.TypeOf(SStringString{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeStrString,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringString{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "String"},
+					},
+					Size:             reflect.TypeOf(SStringString{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeStrString,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringBool{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Bool"},
+					},
+					Size:             reflect.TypeOf(SStringBool{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeBoolString,
+					Size:             reflect.TypeOf(bool(false)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringFloat32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Float32"},
+					},
+					Size:             reflect.TypeOf(SStringFloat32{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeFloat32String,
+					Size:             reflect.TypeOf(float32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringFloat64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Float64"},
+					},
+					Size:             reflect.TypeOf(SStringFloat64{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeFloat64String,
+					Size:             reflect.TypeOf(float64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringInt{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Int"},
+					},
+					Size:             reflect.TypeOf(SStringInt{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeIntString,
+					Size:             reflect.TypeOf(int(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringInt8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Int8"},
+					},
+					Size:             reflect.TypeOf(SStringInt8{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeInt8String,
+					Size:             reflect.TypeOf(int8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringInt16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Int16"},
+					},
+					Size:             reflect.TypeOf(SStringInt16{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeInt16String,
+					Size:             reflect.TypeOf(int16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringInt32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Int32"},
+					},
+					Size:             reflect.TypeOf(SStringInt32{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeInt32String,
+					Size:             reflect.TypeOf(int32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringInt64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Int64"},
+					},
+					Size:             reflect.TypeOf(SStringInt64{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeInt64String,
+					Size:             reflect.TypeOf(int64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringUint{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Uint"},
+					},
+					Size:             reflect.TypeOf(SStringUint{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeUintString,
+					Size:             reflect.TypeOf(uint(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringUint8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Uint8"},
+					},
+					Size:             reflect.TypeOf(SStringUint8{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeUint8String,
+					Size:             reflect.TypeOf(uint8(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringUint16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Uint16"},
+					},
+					Size:             reflect.TypeOf(SStringUint16{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeUint16String,
+					Size:             reflect.TypeOf(uint16(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringUint32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Uint32"},
+					},
+					Size:             reflect.TypeOf(SStringUint32{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeUint32String,
+					Size:             reflect.TypeOf(uint32(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SStringUint64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type: ExpectTypeStruct,
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Uint64"},
+					},
+					Size:             reflect.TypeOf(SStringUint64{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeUint64String,
+					Size:             reflect.TypeOf(uint64(0)).Size(),
+					ParentFrameIndex: 0,
+				},
+			},
+		},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
-			actual := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
+			actual, err := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
+			require.NoError(t, err)
 			require.Equal(t, len(td.ExpectStack), len(actual),
 				"unexpected number of frames:", actual)
 			for i, expect := range td.ExpectStack {
