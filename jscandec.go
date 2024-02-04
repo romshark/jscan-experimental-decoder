@@ -227,11 +227,6 @@ type stackFrame[S []byte | string] struct {
 	// For struct fields however, Offset is assigned statically at decoder init time.
 	Offset uintptr // Overwritten at runtime
 
-	// AdvanceBy is used at runtime for pointer arithmetics to define
-	// how much to advance the pointer by.
-	// AdvanceBy=0x0 means we're not inside of an array or slice.
-	AdvanceBy uintptr
-
 	// ParentFrameIndex defines the index of the composite parent object in the stack.
 	ParentFrameIndex int
 }
@@ -1436,13 +1431,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// and zero it.
 						goto ON_VAL_END
 					}
-					elementSize := d.stackExp[si+1].Size
 					ti++
 					si++
 					d.stackExp[si].Dest = p
 					d.stackExp[si].Len = 0
 					d.stackExp[si].Offset = 0
-					d.stackExp[si].AdvanceBy = elementSize
 
 				case ExpectTypeSlice:
 					p := dest()
@@ -1467,7 +1460,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						si++
 						d.stackExp[si].Dest = dp
 						d.stackExp[si].Offset = 0
-						d.stackExp[si].AdvanceBy = elementSize
 					}
 					ti++
 
@@ -1844,10 +1836,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 						}
 					} else {
-						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
+						d.stackExp[si].Offset += d.stackExp[si].Size
 					}
 				case ExpectTypeSlice:
-					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
+					d.stackExp[si].Offset += d.stackExp[si].Size
 				case ExpectTypeMap:
 					var valKey reflect.Value
 					switch d.stackExp[siParent+1].Type {
