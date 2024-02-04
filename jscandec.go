@@ -260,6 +260,7 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 		len(stack)+1, len(s)/2,
 	)
 	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
+	d.init()
 	if err := d.Decode(s, t, DefaultOptions); err.IsErr() {
 		return err.Err
 	}
@@ -268,8 +269,12 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 
 // Decoder is a reusable decoder instance.
 type Decoder[S []byte | string, T any] struct {
-	tokenizer *jscan.Tokenizer[S]
-	stackExp  []stackFrame[S]
+	tokenizer    *jscan.Tokenizer[S]
+	stackExp     []stackFrame[S]
+	parseInt     func(s S) (int, error)
+	parseUint    func(s S) (uint, error)
+	parseFloat32 func(s S) (float32, error)
+	parseFloat64 func(s S) (float64, error)
 }
 
 // NewDecoder creates a new reusable decoder instance.
@@ -290,7 +295,79 @@ func NewDecoder[S []byte | string, T any](
 	if err != nil {
 		return nil, err
 	}
+
+	d.init()
 	return d, nil
+}
+
+func (d *Decoder[S, T]) init() {
+	// 64-bit system
+	d.parseInt = func(s S) (int, error) {
+		i, overflow := atoi.I64(s)
+		if overflow {
+			return 0, ErrIntegerOverflow
+		}
+		return int(i), nil
+	}
+	d.parseUint = func(s S) (uint, error) {
+		i, overflow := atoi.U64(s)
+		if overflow {
+			return 0, ErrIntegerOverflow
+		}
+		return uint(i), nil
+	}
+	if unsafe.Sizeof(int(0)) != 8 {
+		// 32-bit system
+		d.parseInt = func(s S) (int, error) {
+			i, overflow := atoi.I32(s)
+			if overflow {
+				return 0, ErrIntegerOverflow
+			}
+			return int(i), nil
+		}
+		d.parseUint = func(s S) (uint, error) {
+			i, overflow := atoi.U32(s)
+			if overflow {
+				return 0, ErrIntegerOverflow
+			}
+			return uint(i), nil
+		}
+	}
+
+	d.parseFloat32 = func(s S) (float32, error) {
+		v, err := strconv.ParseFloat(string(s), 32)
+		if err != nil {
+			return 0, err
+		}
+		return float32(v), nil
+	}
+	d.parseFloat64 = func(s S) (float64, error) {
+		v, err := strconv.ParseFloat(string(s), 64)
+		if err != nil {
+			return 0, err
+		}
+		return v, nil
+	}
+	var sz S
+	if _, ok := any(sz).([]byte); ok {
+		// Avoid copying the slice data
+		d.parseFloat32 = func(s S) (float32, error) {
+			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
+			v, err := strconv.ParseFloat(su, 32)
+			if err != nil {
+				return 0, err
+			}
+			return float32(v), nil
+		}
+		d.parseFloat64 = func(s S) (float64, error) {
+			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
+			v, err := strconv.ParseFloat(su, 64)
+			if err != nil {
+				return 0, err
+			}
+			return v, nil
+		}
+	}
 }
 
 // appendTypeToStack will recursively flat-append stack frames recursing into t.
@@ -672,78 +749,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 		return ErrorDecode{Err: ErrNilDest}
 	}
 
-	var fnA2I func(s S) (int, error)
-	var fnA2UI func(s S) (uint, error)
-
-	if unsafe.Sizeof(int(0)) == 8 {
-		// 64-bit system
-		fnA2I = func(s S) (int, error) {
-			i, overflow := atoi.I64(s)
-			if overflow {
-				return 0, ErrIntegerOverflow
-			}
-			return int(i), nil
-		}
-		fnA2UI = func(s S) (uint, error) {
-			i, overflow := atoi.U64(s)
-			if overflow {
-				return 0, ErrIntegerOverflow
-			}
-			return uint(i), nil
-		}
-	} else {
-		// 32-bit system
-		fnA2I = func(s S) (int, error) {
-			i, overflow := atoi.I32(s)
-			if overflow {
-				return 0, ErrIntegerOverflow
-			}
-			return int(i), nil
-		}
-		fnA2UI = func(s S) (uint, error) {
-			i, overflow := atoi.U32(s)
-			if overflow {
-				return 0, ErrIntegerOverflow
-			}
-			return uint(i), nil
-		}
-	}
-
-	fnA2F32 := func(s S) (float32, error) {
-		v, err := strconv.ParseFloat(string(s), 32)
-		if err != nil {
-			return 0, err
-		}
-		return float32(v), nil
-	}
-	fnA2F64 := func(s S) (float64, error) {
-		v, err := strconv.ParseFloat(string(s), 64)
-		if err != nil {
-			return 0, err
-		}
-		return v, nil
-	}
-	var sz S
-	if _, ok := any(sz).([]byte); ok {
-		// Avoid copying the slice data
-		fnA2F32 = func(s S) (float32, error) {
-			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
-			v, err := strconv.ParseFloat(su, 32)
-			if err != nil {
-				return 0, err
-			}
-			return float32(v), nil
-		}
-		fnA2F64 = func(s S) (float64, error) {
-			su := unsafe.String(unsafe.SliceData([]byte(s)), len(s))
-			v, err := strconv.ParseFloat(su, 64)
-			if err != nil {
-				return 0, err
-			}
-			return v, nil
-		}
-	}
-
 	si := 0
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
@@ -820,7 +825,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					if i, e := fnA2UI(s[tokens[ti].Index:tokens[ti].End]); e != nil {
+					if i, e := d.parseUint(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid unsigned integer
 						err = ErrorDecode{
 							Err:   e,
@@ -833,7 +838,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 
 				case ExpectTypeInt:
-					if i, e := fnA2I(s[tokens[ti].Index:tokens[ti].End]); e != nil {
+					if i, e := d.parseInt(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid signed integer
 						err = ErrorDecode{
 							Err:   e,
@@ -979,7 +984,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeFloat32:
 					p := dest()
-					v, errParse := fnA2F32(s[tokens[ti].Index:tokens[ti].End])
+					v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -988,7 +993,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeFloat64:
 					p := dest()
-					v, errParse := fnA2F64(s[tokens[ti].Index:tokens[ti].End])
+					v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -1032,7 +1037,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeFloat32:
 					p := dest()
-					v, errParse := fnA2F32(s[tokens[ti].Index:tokens[ti].End])
+					v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -1040,7 +1045,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*float32)(p) = v
 				case ExpectTypeFloat64:
 					p := dest()
-					v, errParse := fnA2F64(s[tokens[ti].Index:tokens[ti].End])
+					v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -1131,7 +1136,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					v, errParse := fnA2F32(tv)
+					v, errParse := d.parseFloat32(tv)
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -1147,7 +1152,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					v, errParse := fnA2F64(tv)
+					v, errParse := d.parseFloat64(tv)
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
@@ -1163,7 +1168,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					v, errParse := fnA2I(tv)
+					v, errParse := d.parseInt(tv)
 					if errParse != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -1258,7 +1263,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					v, errParse := fnA2UI(tv)
+					v, errParse := d.parseUint(tv)
 					if errParse != nil {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -1607,7 +1612,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						v, errParse := fnA2I(key)
+						v, errParse := d.parseInt(key)
 						if errParse != nil {
 							err = ErrorDecode{
 								Err:   ErrUnexpectedValue,
@@ -1702,7 +1707,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						v, errParse := fnA2UI(key)
+						v, errParse := d.parseUint(key)
 						if errParse != nil {
 							err = ErrorDecode{
 								Err:   ErrUnexpectedValue,
