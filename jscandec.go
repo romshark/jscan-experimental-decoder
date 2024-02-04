@@ -1925,7 +1925,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			return err
 		}
 		return ErrorDecode{
-			Err:   ErrUnexpectedValue,
+			Err:   errTok,
 			Index: errTok.Index,
 		}
 	}

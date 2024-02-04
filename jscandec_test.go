@@ -1938,6 +1938,17 @@ func TestDecodeJSONUnmarshalerErr(t *testing.T) {
 		})
 }
 
+func TestDecodeSyntaxErrorUnexpectedEOF(t *testing.T) {
+	tokenizerString := jscan.NewTokenizer[string](16, 1024)
+	d, err := jscandec.NewDecoder[string, []int](tokenizerString)
+	require.NoError(t, err)
+	var v []int
+	errDecode := d.Decode(`[1,2,3`, &v, jscandec.DefaultOptions)
+	var jscanErr jscan.Error[string]
+	require.True(t, errors.As(errDecode.Err, &jscanErr))
+	require.Equal(t, jscan.ErrorCodeUnexpectedEOF, jscanErr.Code)
+}
+
 func BenchmarkSmall(b *testing.B) {
 	in := []byte(`[[true],[false,false,false,false],[],[],[true]]`) // 18 tokens
 
