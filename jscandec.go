@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -176,7 +177,7 @@ func (t ExpectType) String() string {
 // fieldStackFrame identifies a field within a struct frame.
 type fieldStackFrame struct {
 	// FrameIndex defines the stack index of the field's value frame.
-	FrameIndex int
+	FrameIndex uint32
 
 	// Name defines either the name of the field in the struct
 	// or the json struct tag if any.
@@ -227,9 +228,14 @@ type stackFrame[S []byte | string] struct {
 	// For struct fields however, Offset is assigned statically at decoder init time.
 	Offset uintptr // Overwritten at runtime
 
-	// ParentFrameIndex defines the index of the composite parent object in the stack.
-	ParentFrameIndex int
+	// ParentFrameIndex defines either the index of the composite parent object
+	// in the stack, or noParentFrame.
+	ParentFrameIndex uint32
 }
+
+// noParentFrame uses math.MaxUint32 because the length of the decoder stack
+// is very unlikely to reach 4_294_967_295.
+const noParentFrame = math.MaxUint32
 
 var DefaultOptions = &DecodeOptions{
 	DisallowUnknownFields: false,
@@ -373,21 +379,21 @@ func appendTypeToStack[S []byte | string](
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeAny,
 			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		}), nil
 	} else if s := determineJSONUnmarshalerSupport(t); s != interfaceSupportNone {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeJSONUnmarshaler,
 			RType:            t,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		}), nil
 	} else if s := determineTextUnmarshalerSupport(t); s != interfaceSupportNone {
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeTextUnmarshaler,
 			RType:            t,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		}), nil
 	}
 	switch t.Kind() {
@@ -399,22 +405,22 @@ func appendTypeToStack[S []byte | string](
 		return append(stack, stackFrame[S]{
 			Type:             ExpectTypeAny,
 			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		}), nil
 	case reflect.Array:
 		if t.Len() == 0 {
 			return append(stack, stackFrame[S]{
 				Size:             0,
 				Type:             ExpectTypeArrayLen0,
-				ParentFrameIndex: len(stack) - 1,
+				ParentFrameIndex: noParentFrame,
 			}), nil
 		}
 
-		parentIndex := len(stack)
+		parentIndex := uint32(len(stack))
 		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
 			Type:             ExpectTypeArray,
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 		newAtIndex := len(stack)
 		var err error
@@ -427,11 +433,11 @@ func appendTypeToStack[S []byte | string](
 		stack[newAtIndex].Cap = t.Len()
 
 	case reflect.Slice:
-		parentIndex := len(stack)
+		parentIndex := uint32(len(stack))
 		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
 			Type:             ExpectTypeSlice,
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 		newAtIndex := len(stack)
 		var err error
@@ -443,13 +449,13 @@ func appendTypeToStack[S []byte | string](
 		stack[newAtIndex].ParentFrameIndex = parentIndex
 
 	case reflect.Map:
-		parentIndex := len(stack)
+		parentIndex := uint32(len(stack))
 		stack = append(stack, stackFrame[S]{
 			// The map will be handled via reflect.Value
 			// hence the size is not t.Size().
 			Size:             t.Size(),
 			Type:             ExpectTypeMap,
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 			RType:            t,
 		})
 		{
@@ -472,20 +478,20 @@ func appendTypeToStack[S []byte | string](
 		}
 
 	case reflect.Struct:
-		parentIndex := len(stack)
+		parentIndex := uint32(len(stack))
 		numFields := t.NumField()
 		if numFields == 0 {
 			return append(stack, stackFrame[S]{
 				Size:             t.Size(),
 				Type:             ExpectTypeEmptyStruct,
-				ParentFrameIndex: len(stack) - 1,
+				ParentFrameIndex: noParentFrame,
 			}), nil
 		}
 		stack = append(stack, stackFrame[S]{
 			Fields:           make([]fieldStackFrame, 0, numFields),
 			Size:             t.Size(),
 			Type:             ExpectTypeStruct,
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 
 		for i := 0; i < numFields; i++ {
@@ -509,7 +515,7 @@ func appendTypeToStack[S []byte | string](
 				}
 			}
 
-			newAtIndex := len(stack)
+			newAtIndex := uint32(len(stack))
 			var err error
 			stack, err = appendTypeToStack(stack, f.Type)
 			if err != nil {
@@ -570,92 +576,92 @@ func appendTypeToStack[S []byte | string](
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeBool,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.String:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeStr,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Int:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Int8:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt8,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Int16:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt16,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Int32:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt32,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Int64:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt64,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Uint:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Uint8:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint8,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Uint16:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint16,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Uint32:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint32,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Uint64:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeUint64,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Float32:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeFloat32,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Float64:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeFloat64,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.Pointer:
-		parentIndex := len(stack)
+		parentIndex := uint32(len(stack))
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypePtr,
 			Size:             t.Size(),
-			ParentFrameIndex: len(stack) - 1,
+			ParentFrameIndex: noParentFrame,
 		})
 		newAtIndex := len(stack)
 		var err error
@@ -744,7 +750,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 		return ErrorDecode{Err: ErrNilDest}
 	}
 
-	si := 0
+	si := uint32(0)
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
 	dest := func() unsafe.Pointer {
@@ -1533,7 +1539,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 						key := unescape.Valid[S, string](tv)
 						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
-						if frameIndex == -1 {
+						if frameIndex == noParentFrame {
 							if options.DisallowUnknownFields {
 								err = ErrorDecode{
 									Err:   ErrUnknownField,
@@ -1561,7 +1567,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 						}
 						si = frameIndex
-						if si < 0 {
+						if si == noParentFrame {
 							err = ErrorDecode{
 								Err:   ErrUnexpectedValue,
 								Index: tokens[ti].Index,
@@ -1815,7 +1821,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			continue
 
 		ON_VAL_END:
-			if siParent := d.stackExp[si].ParentFrameIndex; siParent > -1 {
+			if siParent := d.stackExp[si].ParentFrameIndex; siParent != noParentFrame {
 				switch d.stackExp[siParent].Type {
 				case ExpectTypePtr:
 					si--
@@ -1878,7 +1884,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					fallthrough
 				case ExpectTypeStruct:
 					si = siParent
-					if si < 0 {
+					if si == noParentFrame {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
 							Index: tokens[ti].Index,
@@ -1957,7 +1963,7 @@ var (
 // fieldFrameIndexByName returns the frame index of the field identified by name
 // or -1 if no field is found. Exact matches are prioritized over
 // case-insensitive matches.
-func fieldFrameIndexByName[S []byte | string](fields []fieldStackFrame, name S) int {
+func fieldFrameIndexByName[S []byte | string](fields []fieldStackFrame, name S) uint32 {
 	{ // Check for exact matches first
 		f := fields
 		for ; len(f) >= 4; f = f[4:] { // Try 4 at a time if enough are left
@@ -2002,7 +2008,7 @@ func fieldFrameIndexByName[S []byte | string](fields []fieldStackFrame, name S) 
 			return f[i].FrameIndex
 		}
 	}
-	return -1
+	return noParentFrame
 }
 
 func decodeAny[S ~[]byte | ~string](
