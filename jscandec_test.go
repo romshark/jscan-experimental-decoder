@@ -1742,8 +1742,20 @@ func TestDecodeUnmarshalerFields(t *testing.T) {
 func TestDecodeJSONUnmarshalerErr(t *testing.T) {
 	s := newTestSetup[unmarshalerImplErr](t, *jscandec.DefaultOptions)
 	s.testErrCheck(t, "integer", `123`, func(t *testing.T, err jscandec.ErrorDecode) {
-		require.Equal(t, errUnmarshalerImplErr, err.Err)
+		require.Equal(t, errUnmarshalerImpl, err.Err)
 	})
+
+	s2 := newTestSetup[map[textUnmarshalerImplErr]struct{}](t, *jscandec.DefaultOptions)
+	s2.testErrCheck(t, "map", `{"x":"y"}`, func(t *testing.T, err jscandec.ErrorDecode) {
+		require.Equal(t, errTextUnmarshalerImpl, err.Err)
+	})
+
+	type S struct{ Unmarshaler textUnmarshalerImplErr }
+	s3 := newTestSetup[S](t, *jscandec.DefaultOptions)
+	s3.testErrCheck(t, "struct_field", `{"Unmarshaler":"abc"}`,
+		func(t *testing.T, err jscandec.ErrorDecode) {
+			require.Equal(t, errTextUnmarshalerImpl, err.Err)
+		})
 }
 
 func BenchmarkSmall(b *testing.B) {
@@ -1786,6 +1798,15 @@ func (impl *jsonUnmarshalerImpl) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// unmarshalerImplErr implements encoding/json.Unmarshaler and always returns an error.
+type unmarshalerImplErr struct{ Value string }
+
+func (impl *unmarshalerImplErr) UnmarshalJSON(data []byte) error {
+	return errUnmarshalerImpl
+}
+
+var errUnmarshalerImpl = errors.New("unmarshalerImplErr test error")
+
 // textUnmarshalerImpl implements encoding/json.Unmarshaler.
 type textUnmarshalerImpl struct{ Value string }
 
@@ -1794,11 +1815,11 @@ func (impl *textUnmarshalerImpl) UnmarshalText(text []byte) error {
 	return nil
 }
 
-// unmarshalerImplErr implements encoding/json.Unmarshaler and always returns an error.
-type unmarshalerImplErr struct{ Value string }
+// textUnmarshalerImplErr implements encoding/json.Unmarshaler.
+type textUnmarshalerImplErr struct{ Value string }
 
-func (impl *unmarshalerImplErr) UnmarshalJSON(data []byte) error {
-	return errUnmarshalerImplErr
+func (impl *textUnmarshalerImplErr) UnmarshalText(text []byte) error {
+	return errTextUnmarshalerImpl
 }
 
-var errUnmarshalerImplErr = errors.New("unmarshalerImplErr error")
+var errTextUnmarshalerImpl = errors.New("textUnmarshalerImplErr test error")

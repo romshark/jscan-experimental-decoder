@@ -1769,7 +1769,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// The value frame is guaranteed to be at an offset of 2
 					// relative to the map frame index.
 					si += 2
-					d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
+					if d.stackExp[si].Size > 0 {
+						d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
+					}
 
 				default:
 					err = ErrorDecode{
