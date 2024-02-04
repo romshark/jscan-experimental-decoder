@@ -783,7 +783,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, errParse := strconv.ParseFloat(su, 64)
 					if errParse != nil {
 						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
+							Err:   errParse,
 							Index: tokens[ti].Index,
 						}
 						return true
@@ -1001,7 +1001,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, errParse := strconv.ParseFloat(su, 64)
 					if errParse != nil {
 						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
+							Err:   errParse,
 							Index: tokens[ti].Index,
 						}
 						return true

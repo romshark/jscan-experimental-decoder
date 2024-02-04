@@ -203,6 +203,12 @@ func TestDecodeAny(t *testing.T) {
 		"array_mix":   []any{nil, false, float64(42), "/\r\n", map[string]any{}, true},
 		"null":        nil,
 	})
+
+	s.testErrCheck(t, "float_range_hi", `1e309`,
+		func(t *testing.T, err jscandec.ErrorDecode) {
+			require.ErrorIs(t, err.Err, strconv.ErrRange)
+			require.Equal(t, 0, err.Index)
+		})
 }
 
 func TestDecodeUint(t *testing.T) {
