@@ -56,6 +56,7 @@ const (
 	ExpectTypeAny
 	ExpectTypeMap
 	ExpectTypeArray
+	ExpectTypeArrayLen0
 	ExpectTypeSlice
 	ExpectTypeStruct
 	ExpectTypeEmptyStruct
@@ -104,6 +105,8 @@ func (t ExpectType) String() string {
 		return "map"
 	case ExpectTypeArray:
 		return "array"
+	case ExpectTypeArrayLen0:
+		return "[0]array"
 	case ExpectTypeSlice:
 		return "slice"
 	case ExpectTypeStruct:
@@ -197,10 +200,16 @@ type stackFrame[S []byte | string] struct {
 	// to clean it up if necessary.
 	MapValue reflect.Value
 
-	// Size defines the number of bytes the data would occupy in memory,
-	// except for arrays, for which it defines the static length of the array.
-	// Size could be taken from reflect.Type but it's slower than storing it here.
+	// Size defines the number of bytes the data would occupy in memory.
+	// Size caches reflect.Type.Size() for faster access.
 	Size uintptr
+
+	// Cap is relevant to array item frames only and defines the
+	// capacity of the parent array.
+	Cap int
+
+	// Len is relevant to array frames only and defines their current length.
+	Len int // Overwritten at runtime
 
 	// Type defines what data type is expected at this frame.
 	// Same as Size, Type kind could be taken from reflect.Type but it's
@@ -321,6 +330,14 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: len(stack) - 1,
 		}), nil
 	case reflect.Array:
+		if t.Len() == 0 {
+			return append(stack, stackFrame[S]{
+				Size:             0,
+				Type:             ExpectTypeArrayLen0,
+				ParentFrameIndex: len(stack) - 1,
+			}), nil
+		}
+
 		parentIndex := len(stack)
 		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
@@ -335,6 +352,7 @@ func appendTypeToStack[S []byte | string](
 
 		// Link array element to the array frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
+		stack[newAtIndex].Cap = t.Len()
 
 	case reflect.Slice:
 		parentIndex := len(stack)
@@ -738,9 +756,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			if d.stackExp[si].Type == ExpectTypePtr {
 				p := dest()
 				si++
-				dp := allocate(d.stackExp[si].Size)
-				d.stackExp[si].Dest = dp
-				*(*unsafe.Pointer)(p) = dp
+				if d.stackExp[si].Size == 0 {
+					*(*unsafe.Pointer)(p) = emptyStructAddr
+				} else {
+					dp := allocate(d.stackExp[si].Size)
+					d.stackExp[si].Dest = dp
+					*(*unsafe.Pointer)(p) = dp
+				}
 				continue
 			}
 			switch tokens[ti].Type {
@@ -811,7 +833,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 
 				case ExpectTypeInt:
-					if ui, e := fnA2I(s[tokens[ti].Index:tokens[ti].End]); e != nil {
+					if i, e := fnA2I(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid signed integer
 						err = ErrorDecode{
 							Err:   e,
@@ -820,7 +842,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						return true
 					} else {
 						p := dest()
-						*(*int)(p) = ui
+						*(*int)(p) = i
 					}
 
 				case ExpectTypeUint8:
@@ -1395,6 +1417,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END
 
+				case ExpectTypeArrayLen0:
+					// Ignore this array
+					ti = tokens[ti].End + 1
+					goto ON_VAL_END
+
 				case ExpectTypeArray:
 					p := dest()
 					if tokens[ti].Elements < 1 {
@@ -1404,20 +1431,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// and zero it.
 						goto ON_VAL_END
 					}
-					if uintptr(tokens[ti].Elements) > d.stackExp[si].Size {
-						// Go array is too small to accommodate all values.
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
-						return true
-					}
-
 					elementSize := d.stackExp[si+1].Size
-
 					ti++
 					si++
 					d.stackExp[si].Dest = p
+					d.stackExp[si].Len = 0
 					d.stackExp[si].Offset = 0
 					d.stackExp[si].AdvanceBy = elementSize
 
@@ -1425,15 +1443,20 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := dest()
 					elementSize := d.stackExp[si+1].Size
 
-					var dp unsafe.Pointer
 					if elems := uintptr(tokens[ti].Elements); elems == 0 {
 						// Allocate empty slice
-						dp = allocate(elementSize)
+						dp := emptyStructAddr
+						if elementSize > 0 {
+							dp = allocate(elementSize)
+						}
 						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: 0, Cap: 0}
 						ti += 2
 						goto ON_VAL_END
 					} else {
-						dp = allocate(elems * elementSize)
+						dp := emptyStructAddr
+						if elementSize > 0 {
+							dp = allocate(elems * elementSize)
+						}
 						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: elems, Cap: elems}
 
 						si++
@@ -1799,7 +1822,26 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				switch d.stackExp[siParent].Type {
 				case ExpectTypePtr:
 					si--
-				case ExpectTypeArray, ExpectTypeSlice:
+				case ExpectTypeArray:
+					d.stackExp[si].Len++
+					if d.stackExp[si].Len >= d.stackExp[si].Cap {
+						// Skip all extra values
+					SKIP_ALL_EXTRA_VALUES:
+						for l := 1; ; ti++ {
+							switch tokens[ti].Type {
+							case jscan.TokenTypeArray:
+								l++
+							case jscan.TokenTypeArrayEnd:
+								l--
+								if l < 1 {
+									break SKIP_ALL_EXTRA_VALUES
+								}
+							}
+						}
+					} else {
+						d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
+					}
+				case ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].AdvanceBy
 				case ExpectTypeMap:
 					var valKey reflect.Value
@@ -2014,3 +2056,7 @@ func decodeAny[S ~[]byte | ~string](
 	}
 	panic("unreachable")
 }
+
+// emptyStructAddr the address to an empty slice remains the same
+// throughout the life of the process.
+var emptyStructAddr = unsafe.Pointer(&struct{}{})

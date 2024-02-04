@@ -712,6 +712,186 @@ func TestDecodeEmptyStruct(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeSliceEmptyStruct(t *testing.T) {
+	type S struct{}
+	s := newTestSetup[[]S](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, []S(nil))
+	s.testOK(t, "empty_array", `[]`, []S{})
+	s.testOK(t, "array_one", `[{}]`, []S{{}})
+	s.testOK(t, "array_multiple", `[{},{},{}]`, []S{{}, {}, {}})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArray(t *testing.T) {
+	s := newTestSetup[[3]int](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, [3]int{})
+	s.testOK(t, "empty_array", `[]`, [3]int{})
+	s.testOK(t, "array_one", `[1]`, [3]int{1, 0, 0})
+	s.testOK(t, "array_full", `[1,2,3]`, [3]int{1, 2, 3})
+	s.testOK(t, "array_overflow",
+		`[1,2,3,false,true,{},{"x":"y"},[],null,42,3.14]`, [3]int{1, 2, 3})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArray2D(t *testing.T) {
+	type A [2][2]int
+	s := newTestSetup[A](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, A{})
+	s.testOK(t, "empty_array", `[]`, A{})
+	s.testOK(t, "array_one", `[[]]`, A{})
+	s.testOK(t, "array_full", `[[1,2],[3,4]]`, A{{1, 2}, {3, 4}})
+	s.testOK(t, "array_overflow",
+		`[[1,2],[3,4],false,true,{},{"x":"y"},[],null,42,3.14]`, A{{1, 2}, {3, 4}})
+	s.testOK(t, "array_overflow_in_subarray",
+		`[[1,2, 3,[],{}],[4,5, 6,[],{}],false,true,{},{"x":"y"},[],null,42,3.14]`,
+		A{{1, 2}, {4, 5}})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArrayLen0(t *testing.T) {
+	s := newTestSetup[[0]int](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, [0]int{})
+	s.testOK(t, "empty_array", `[]`, [0]int{})
+	s.testOK(t, "array_one", `[1]`, [0]int{})
+	s.testOK(t, "array_one_empty_object", `[{}]`, [0]int{})
+	s.testOK(t, "array_multiple",
+		`[false,true,{},{"x":"y"},[],null,42,3.14]`, [0]int{})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArrayLen02D(t *testing.T) {
+	type A [0][0]int
+	s := newTestSetup[A](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, A{})
+	s.testOK(t, "empty_array", `[]`, A{})
+	s.testOK(t, "array_one", `[1]`, A{})
+	s.testOK(t, "array_one_empty_object", `[{}]`, A{})
+	s.testOK(t, "array_multiple",
+		`[false,true,{},{"x":"y"},[],null,42,3.14]`, A{})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArrayArrayLen0(t *testing.T) {
+	type A [2][0]int
+	s := newTestSetup[A](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, A{})
+	s.testOK(t, "empty_array", `[]`, A{})
+	s.testOK(t, "array_overflow",
+		`[[],[],false,true,{},{"x":"y"},[],null,42,3.14]`, A{})
+	s.testOK(t, "array_overflow_in_subarray",
+		`[["foo",1.2],["bar",3.4],false,true,{},{"x":"y"},[],null,42,3.14]`, A{})
+
+	s.testErr(t, "array_int", `[1,2]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "array_one_empty_object", `[{}]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "float", `3.14`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
+func TestDecodeArrayEmptyStruct(t *testing.T) {
+	type S struct{}
+	s := newTestSetup[[3]S](t, *jscandec.DefaultOptions)
+	s.testOK(t, "null", `null`, [3]S{})
+	s.testOK(t, "empty_array", `[]`, [3]S{})
+	s.testOK(t, "array_one", `[{}]`, [3]S{})
+	s.testOK(t, "array_full", `[{},{},{}]`, [3]S{})
+	s.testOK(t, "array_overflow", `[{},{},{},{},{},{},{},{}, {}]`, [3]S{})
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object_empty", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{"x":0}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeStruct(t *testing.T) {
 	type S struct {
 		Foo int    `json:"foo"`

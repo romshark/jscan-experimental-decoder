@@ -267,6 +267,39 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
+			Input: [0]int{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeArrayLen0,
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: [0][0]string{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeArrayLen0,
+					ParentFrameIndex: -1,
+				},
+			},
+		},
+		{
+			Input: [3][0]string{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeArray,
+					Size:             reflect.TypeOf([3][0]string{}).Size(),
+					ParentFrameIndex: -1,
+				},
+				{
+					Type:             ExpectTypeArrayLen0,
+					Cap:              3,
+					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
 			Input: [4]int{},
 			ExpectStack: []stackFrame[string]{
 				{
@@ -278,6 +311,7 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
 					ParentFrameIndex: 0,
+					Cap:              4,
 				},
 			},
 		},
