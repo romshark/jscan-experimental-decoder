@@ -759,7 +759,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		for ti := 0; ti < len(tokens); {
-			if d.stackExp[si].Type == ExpectTypePtr {
+			switch d.stackExp[si].Type {
+			case ExpectTypePtr:
 				p := dest()
 				si++
 				if d.stackExp[si].Size == 0 {
@@ -770,12 +771,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*unsafe.Pointer)(p) = dp
 				}
 				continue
+			case ExpectTypeJSONUnmarshaler:
+				goto ON_JSON_UNMARSHALER
 			}
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					p := dest()
 					v := tokens[ti].Type == jscan.TokenTypeTrue
@@ -795,8 +796,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 			case jscan.TokenTypeInteger:
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					p := dest()
 					tv := s[tokens[ti].Index:tokens[ti].End]
@@ -1013,8 +1012,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 			case jscan.TokenTypeNumber:
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					p := dest()
 					tv := s[tokens[ti].Index:tokens[ti].End]
@@ -1063,8 +1060,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				p := dest()
 
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeTextUnmarshaler:
 					p := dest()
 					u := reflect.NewAt(
@@ -1363,8 +1358,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			case jscan.TokenTypeNull:
 				p := dest()
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeEmptyStruct:
 					// Nothing
 				case ExpectTypeAny:
@@ -1407,8 +1400,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 			case jscan.TokenTypeArray:
 				switch d.stackExp[si].Type {
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					p := dest()
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
@@ -1482,8 +1473,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeEmptyStruct:
 					ti = tokens[ti].End // Skip object value
 					goto ON_VAL_END
-				case ExpectTypeJSONUnmarshaler:
-					goto ON_JSON_UNMARSHALER
 				case ExpectTypeAny:
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
