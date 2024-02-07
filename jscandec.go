@@ -51,44 +51,120 @@ type ExpectType int8
 const (
 	_ ExpectType = iota
 
+	// ExpectTypeJSONUnmarshaler is any type that implements
+	// the encoding/json.Unmarshaler interface
 	ExpectTypeJSONUnmarshaler
+
+	// ExpectTypeTextUnmarshaler is any type that implements
+	// the encoding.TextUnmarshaler interface
 	ExpectTypeTextUnmarshaler
+
+	// ExpectTypePtr is any pointer type
 	ExpectTypePtr
+
+	// ExpectTypeMap is type `any``
 	ExpectTypeAny
+
+	// ExpectTypeMap is any map type
 	ExpectTypeMap
+
+	// ExpectTypeArray is any array type except zero-length array
 	ExpectTypeArray
+
+	// ExpectTypeArrayLen0 is any zero-length array type (like [0]int)
 	ExpectTypeArrayLen0
+
+	// ExpectTypeSlice is any slice type
 	ExpectTypeSlice
+
+	// ExpectTypeStruct is any struct type except `struct{}`
 	ExpectTypeStruct
+
+	// ExpectTypeEmptyStruct is type `struct{}`
 	ExpectTypeEmptyStruct
+
+	// ExpectTypeBool is type `bool`
 	ExpectTypeBool
+
+	// ExpectTypeStr is type `string`
 	ExpectTypeStr
+
+	// ExpectTypeFloat32 is type `float32`
 	ExpectTypeFloat32
+
+	// ExpectTypeFloat64 is type `float64`
 	ExpectTypeFloat64
+
+	// ExpectTypeInt is type `int`
 	ExpectTypeInt
+
+	// ExpectTypeInt8 is type `int8`
 	ExpectTypeInt8
+
+	// ExpectTypeInt16 is type `int16`
 	ExpectTypeInt16
+
+	// ExpectTypeInt32 is type `int32`
 	ExpectTypeInt32
+
+	// ExpectTypeInt64 is type `int64`
 	ExpectTypeInt64
+
+	// ExpectTypeUint is type `uint`
 	ExpectTypeUint
+
+	// ExpectTypeUint8 is type `uint8`
 	ExpectTypeUint8
+
+	// ExpectTypeUint16 is type `uint16`
 	ExpectTypeUint16
+
+	// ExpectTypeUint32 is type `uint32`
 	ExpectTypeUint32
+
+	// ExpectTypeUint64 is type `uint64`
 	ExpectTypeUint64
 
+	// ExpectTypeBoolString is type `bool` with `json:",string"` tag
 	ExpectTypeBoolString
+
+	// ExpectTypeStrString is type `string` with `json:",string"` tag
 	ExpectTypeStrString
+
+	// ExpectTypeFloat32String is type `float32` with `json:",string"` tag
 	ExpectTypeFloat32String
+
+	// ExpectTypeFloat64String is type `float32` with `json:",string"` tag
 	ExpectTypeFloat64String
+
+	// ExpectTypeIntString is type `int` with `json:",string"` tag
 	ExpectTypeIntString
+
+	// ExpectTypeInt8String is type `int8` with `json:",string"` tag
 	ExpectTypeInt8String
+
+	// ExpectTypeInt16String is type `int16` with `json:",string"` tag
 	ExpectTypeInt16String
+
+	// ExpectTypeInt32String is type `int32` with `json:",string"` tag
 	ExpectTypeInt32String
+
+	// ExpectTypeInt64String is type `int64` with `json:",string"` tag
 	ExpectTypeInt64String
+
+	// ExpectTypeUintString is type `uint` with `json:",string"` tag
 	ExpectTypeUintString
+
+	// ExpectTypeUint8String is type `uint8` with `json:",string"` tag
 	ExpectTypeUint8String
+
+	// ExpectTypeUint16String is type `uint16` with `json:",string"` tag
 	ExpectTypeUint16String
+
+	// ExpectTypeUint32String is type `uint32` with `json:",string"` tag
 	ExpectTypeUint32String
+
+	// ExpectTypeUint64String is type `uint64` with `json:",string"` tag
 	ExpectTypeUint64String
 )
 
