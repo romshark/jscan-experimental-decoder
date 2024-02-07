@@ -288,11 +288,6 @@ type stackFrame[S []byte | string] struct {
 	// Len is relevant to array frames only and defines their current length.
 	Len int // Overwritten at runtime
 
-	// Type defines what data type is expected at this frame.
-	// Same as Size, Type kind could be taken from reflect.Type but it's
-	// slower than storing it here.
-	Type ExpectType
-
 	// Dest defines the destination memory to write the data to.
 	// Dest is set at runtime and must be reset on every call to Decode
 	// to avoid keeping a pointer to the allocated data and allow the GC
@@ -307,6 +302,11 @@ type stackFrame[S []byte | string] struct {
 	// ParentFrameIndex defines either the index of the composite parent object
 	// in the stack, or noParentFrame.
 	ParentFrameIndex uint32
+
+	// Type defines what data type is expected at this frame.
+	// Same as Size, Type kind could be taken from reflect.Type but it's
+	// slower than storing it here.
+	Type ExpectType
 }
 
 // noParentFrame uses math.MaxUint32 because the length of the decoder stack
