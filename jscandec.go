@@ -77,6 +77,9 @@ const (
 	// ExpectTypeSlice is any slice type
 	ExpectTypeSlice
 
+	// ExpectTypeSliceInt is type `[]int`
+	ExpectTypeSliceInt
+
 	// ExpectTypeStruct is any struct type except `struct{}`
 	ExpectTypeStruct
 
@@ -186,6 +189,8 @@ func (t ExpectType) String() string {
 		return "[0]array"
 	case ExpectTypeSlice:
 		return "slice"
+	case ExpectTypeSliceInt:
+		return "[]int"
 	case ExpectTypeStruct:
 		return "struct"
 	case ExpectTypeEmptyStruct:
@@ -509,6 +514,15 @@ func appendTypeToStack[S []byte | string](
 		stack[newAtIndex].Cap = t.Len()
 
 	case reflect.Slice:
+		switch t.Elem().Kind() {
+		case reflect.Int:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceInt,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		}
+
 		parentIndex := uint32(len(stack))
 		stack = append(stack, stackFrame[S]{
 			Size:             t.Size(),
@@ -1600,6 +1614,40 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						d.stackExp[si].Offset = 0
 					}
 					ti++
+
+				case ExpectTypeSliceInt:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]int, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							v, errParse := d.parseInt(s[tokens[i].Index:tokens[i].End])
+							if errParse != nil {
+								err = ErrorDecode{
+									Err:   errParse,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]int)(p) = sl
+					goto ON_VAL_END
 
 				default:
 					err = ErrorDecode{
