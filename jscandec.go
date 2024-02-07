@@ -1648,7 +1648,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if tokens[ti+1].Type == jscan.TokenTypeObjectEnd {
+					if tokens[ti].Elements == 0 {
 						ti += 2
 						goto ON_VAL_END
 					}
