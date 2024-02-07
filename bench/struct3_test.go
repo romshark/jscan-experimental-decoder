@@ -117,12 +117,15 @@ func TestImplementationsStruct3(t *testing.T) {
 }
 
 func BenchmarkDecodeStruct3(b *testing.B) {
-	in := []byte(`{"foo":"bar", "1234":""}`)
+	in := []byte(`{
+		"name":"Test name",
+		"number": 100553,
+		"tags": ["sports", "portable"]
+	}`)
 
 	b.Run("std", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := json.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -130,9 +133,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("jsoniter", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := jsoniter.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -140,9 +142,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("goccy", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := goccy.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -150,9 +151,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("easyjson", func(b *testing.B) {
-		var v easyjsongen.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v easyjsongen.Struct3
 			if err := easyjson.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -160,9 +160,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("ffjson", func(b *testing.B) {
-		var v ffjsongen.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v ffjsongen.Struct3
 			if err := ffjson.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -192,9 +191,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("jsonv2", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := jsonv2.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -202,9 +200,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("segmentio", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := segmentio.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
@@ -227,9 +224,8 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("jscan/unmarshal", func(b *testing.B) {
-		var v bench.Struct3
-		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
+			var v bench.Struct3
 			if err := jscandec.Unmarshal(in, &v); err != nil {
 				b.Fatal(err)
 			}
