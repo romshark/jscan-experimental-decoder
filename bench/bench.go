@@ -404,12 +404,11 @@ func FastjsonStruct3(j []byte) (s Struct3, err error) {
 	o.Visit(func(key []byte, v *fastjson.Value) {
 		switch string(key) {
 		case "name":
-			if v.Type() != fastjson.TypeString {
-				err = ErrInvalid
+			var b []byte
+			if b, err = v.StringBytes(); err != nil {
 				return
 			}
-			v := v.String()
-			s.Name = v[1 : len(v)-1]
+			s.Name = string(b)
 		case "number":
 			if s.Number, err = v.Int(); err != nil {
 				return
@@ -425,8 +424,11 @@ func FastjsonStruct3(j []byte) (s Struct3, err error) {
 					err = ErrInvalid
 					return
 				}
-				v := a[i].String()
-				s.Tags[i] = v[1 : len(v)-1]
+				var b []byte
+				if b, err = a[i].StringBytes(); err != nil {
+					return
+				}
+				s.Tags[i] = string(b)
 			}
 		default:
 			err = ErrInvalid
