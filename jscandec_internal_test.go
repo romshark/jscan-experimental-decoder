@@ -197,17 +197,112 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
+			Input: []int{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]int{}).Size(),
+					Type:             ExpectTypeSliceInt,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []int8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]int8{}).Size(),
+					Type:             ExpectTypeSliceInt8,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []int16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]int16{}).Size(),
+					Type:             ExpectTypeSliceInt16,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []int32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]int32{}).Size(),
+					Type:             ExpectTypeSliceInt32,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []int64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]int64{}).Size(),
+					Type:             ExpectTypeSliceInt64,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []uint{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]uint{}).Size(),
+					Type:             ExpectTypeSliceUint,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []uint8{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]uint8{}).Size(),
+					Type:             ExpectTypeSliceUint8,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []uint16{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]uint16{}).Size(),
+					Type:             ExpectTypeSliceUint16,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []uint32{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]uint32{}).Size(),
+					Type:             ExpectTypeSliceUint32,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []uint64{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]uint64{}).Size(),
+					Type:             ExpectTypeSliceUint64,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
 			Input: []byte{},
 			ExpectStack: []stackFrame[string]{
 				{
 					Size:             reflect.TypeOf([]byte{}).Size(),
-					Type:             ExpectTypeSlice,
+					Type:             ExpectTypeSliceUint8,
 					ParentFrameIndex: noParentFrame,
-				},
-				{
-					Size:             reflect.TypeOf(uint8(0)).Size(),
-					Type:             ExpectTypeUint8,
-					ParentFrameIndex: 0,
 				},
 			},
 		},

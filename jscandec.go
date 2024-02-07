@@ -80,6 +80,39 @@ const (
 	// ExpectTypeSliceInt is type `[]int`
 	ExpectTypeSliceInt
 
+	// ExpectTypeSliceInt8 is type `[]int8`
+	ExpectTypeSliceInt8
+
+	// ExpectTypeSliceInt16 is type `[]int16`
+	ExpectTypeSliceInt16
+
+	// ExpectTypeSliceInt32 is type `[]int32`
+	ExpectTypeSliceInt32
+
+	// ExpectTypeSliceInt64 is type `[]int64`
+	ExpectTypeSliceInt64
+
+	// ExpectTypeSliceUint is type `[]uint`
+	ExpectTypeSliceUint
+
+	// ExpectTypeSliceUint8 is type `[]uint8`
+	ExpectTypeSliceUint8
+
+	// ExpectTypeSliceUint16 is type `[]uint16`
+	ExpectTypeSliceUint16
+
+	// ExpectTypeSliceUint32 is type `[]uint32`
+	ExpectTypeSliceUint32
+
+	// ExpectTypeSliceUint64 is type `[]uint64`
+	ExpectTypeSliceUint64
+
+	// ExpectTypeSliceFloat32 is type `[]float32`
+	ExpectTypeSliceFloat32
+
+	// ExpectTypeSliceFloat64 is type `[]float64`
+	ExpectTypeSliceFloat64
+
 	// ExpectTypeStruct is any struct type except `struct{}`
 	ExpectTypeStruct
 
@@ -191,6 +224,28 @@ func (t ExpectType) String() string {
 		return "slice"
 	case ExpectTypeSliceInt:
 		return "[]int"
+	case ExpectTypeSliceInt8:
+		return "[]int8"
+	case ExpectTypeSliceInt16:
+		return "[]int16"
+	case ExpectTypeSliceInt32:
+		return "[]int32"
+	case ExpectTypeSliceInt64:
+		return "[]int64"
+	case ExpectTypeSliceUint:
+		return "[]uint"
+	case ExpectTypeSliceUint8:
+		return "[]uint8"
+	case ExpectTypeSliceUint16:
+		return "[]uint16"
+	case ExpectTypeSliceUint32:
+		return "[]uint32"
+	case ExpectTypeSliceUint64:
+		return "[]uint64"
+	case ExpectTypeSliceFloat32:
+		return "[]float32"
+	case ExpectTypeSliceFloat64:
+		return "[]float64"
 	case ExpectTypeStruct:
 		return "struct"
 	case ExpectTypeEmptyStruct:
@@ -519,6 +574,72 @@ func appendTypeToStack[S []byte | string](
 			return append(stack, stackFrame[S]{
 				Size:             t.Size(),
 				Type:             ExpectTypeSliceInt,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Int8:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceInt8,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Int16:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceInt16,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Int32:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceInt32,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Int64:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceInt64,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Uint:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceUint,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Uint8:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceUint8,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Uint16:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceUint16,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Uint32:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceUint32,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Uint64:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceUint64,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Float32:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceFloat32,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.Float64:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceFloat64,
 				ParentFrameIndex: noParentFrame,
 			}), nil
 		}
@@ -1647,6 +1768,462 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					ti += len(tokens) + 2
 					*(*[]int)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceInt8:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]int8, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							v, overflow := atoi.I8(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]int8)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceInt16:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]int16, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							v, overflow := atoi.I16(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]int16)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceInt32:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]int32, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							v, overflow := atoi.I32(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]int32)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceInt64:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]int64, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							v, overflow := atoi.I64(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]int64)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceUint:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]uint, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							if s[tokens[i].Index] == '-' {
+								err = ErrorDecode{
+									Err:   ErrUnexpectedValue,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							v, errParse := d.parseUint(s[tokens[i].Index:tokens[i].End])
+							if errParse != nil {
+								err = ErrorDecode{
+									Err:   errParse,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]uint)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceUint8:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]uint8, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							if s[tokens[i].Index] == '-' {
+								err = ErrorDecode{
+									Err:   ErrUnexpectedValue,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							v, overflow := atoi.U8(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]uint8)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceUint16:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]uint16, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							if s[tokens[i].Index] == '-' {
+								err = ErrorDecode{
+									Err:   ErrUnexpectedValue,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							v, overflow := atoi.U16(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]uint16)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceUint32:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]uint32, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							if s[tokens[i].Index] == '-' {
+								err = ErrorDecode{
+									Err:   ErrUnexpectedValue,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							v, overflow := atoi.U32(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]uint32)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceUint64:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]uint64, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeInteger:
+							if s[tokens[i].Index] == '-' {
+								err = ErrorDecode{
+									Err:   ErrUnexpectedValue,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							v, overflow := atoi.U64(s[tokens[i].Index:tokens[i].End])
+							if overflow {
+								err = ErrorDecode{
+									Err:   ErrIntegerOverflow,
+									Index: tokens[i].Index,
+								}
+								return true
+							}
+							sl[i] = v
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]uint64)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceFloat32:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]float32, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeNumber:
+							tv := s[tokens[i].Index:tokens[i].End]
+							v, errParse := d.parseFloat32(
+								tv,
+							)
+							if errParse != nil {
+								err = ErrorDecode{Err: errParse, Index: tokens[i].Index}
+								return true
+							}
+							sl[i] = v
+						case jscan.TokenTypeInteger:
+							if tokens[i].End-tokens[i].Index < len("16777216") {
+								// Numbers below this length are guaranteed to be smaller
+								// 1<<24 and float32(i32) is faster than parseFloat32.
+								i32, errParse := tokens[i].Int32(s)
+								if errParse != nil {
+									err = ErrorDecode{
+										Err: errParse, Index: tokens[i].Index,
+									}
+									return true
+								}
+								sl[i] = float32(i32)
+							} else {
+								v, errParse := d.parseFloat32(
+									s[tokens[i].Index:tokens[i].End],
+								)
+								if errParse != nil {
+									err = ErrorDecode{
+										Err: errParse, Index: tokens[i].Index,
+									}
+									return true
+								}
+								sl[i] = v
+							}
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]float32)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceFloat64:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]float64, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = 0
+						case jscan.TokenTypeNumber:
+							v, errParse := d.parseFloat64(
+								s[tokens[i].Index:tokens[i].End],
+							)
+							if errParse != nil {
+								err = ErrorDecode{Err: errParse, Index: tokens[i].Index}
+								return true
+							}
+							sl[i] = v
+						case jscan.TokenTypeInteger:
+							if tokens[i].End-tokens[i].Index < len("9007199254740992") {
+								// Numbers below this length are guaranteed to be smaller
+								// 1<<53a and float64(i64) is faster than parseFloat64.
+								v, errParse := tokens[i].Int64(s)
+								if errParse != nil {
+									err = ErrorDecode{
+										Err: errParse, Index: tokens[i].Index,
+									}
+									return true
+								}
+								sl[i] = float64(v)
+							} else {
+								v, errParse := d.parseFloat64(
+									s[tokens[i].Index:tokens[i].End],
+								)
+								if errParse != nil {
+									err = ErrorDecode{
+										Err: errParse, Index: tokens[i].Index,
+									}
+									return true
+								}
+								sl[i] = v
+							}
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]float64)(p) = sl
 					goto ON_VAL_END
 
 				default:

@@ -622,16 +622,237 @@ func TestDecodeSliceInt(t *testing.T) {
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.testOK(t, "three_items", `[ 1, -23, 456 ]`, T{1, -23, 456})
 	s.testOK(t, "max_int", `[9223372036854775807]`, T{math.MaxInt})
-	s.testOK(t, "max_int", `[-9223372036854775808]`, T{math.MinInt})
+	s.testOK(t, "min_int", `[-9223372036854775808]`, T{math.MinInt})
 	s.testOK(t, "one_item", `[ 1 ]`, T{1})
 	s.testOK(t, "empty", `[]`, T{})
 	s.testOK(t, "null", `null`, T(nil))
 	s.testOK(t, "null_element", `[ null ]`, T{0})
-	s.testOK(t, "null_multiple", `[ null, 1, null ]`, T{0, 1, 0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
 	s.testErr(t, "overflow_hi", `[9223372036854775808]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
 	s.testErr(t, "overflow_lo", `[-9223372036854775809]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceInt8(t *testing.T) {
+	type T = []int8
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, -23, 123 ]`, T{1, -23, 123})
+	s.testOK(t, "max_int8", `[127]`, T{math.MaxInt8})
+	s.testOK(t, "min_int8", `[-128]`, T{math.MinInt8})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "overflow_hi", `[128]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "overflow_lo", `[-129]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceInt16(t *testing.T) {
+	type T = []int16
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, -23, 123 ]`, T{1, -23, 123})
+	s.testOK(t, "max_int16", `[32767]`, T{math.MaxInt16})
+	s.testOK(t, "min_int16", `[-32768]`, T{math.MinInt16})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "overflow_hi", `[32768]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "overflow_lo", `[-32769]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceInt32(t *testing.T) {
+	type T = []int32
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, -23, 123 ]`, T{1, -23, 123})
+	s.testOK(t, "max_int32", `[2147483647]`, T{math.MaxInt32})
+	s.testOK(t, "min_int32", `[-2147483648]`, T{math.MinInt32})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "overflow_hi", `[2147483648]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "overflow_lo", `[-2147483649]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceInt64(t *testing.T) {
+	type T = []int64
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, -23, 123 ]`, T{1, -23, 123})
+	s.testOK(t, "max_int64", `[9223372036854775807]`, T{math.MaxInt64})
+	s.testOK(t, "min_int64", `[-9223372036854775808]`, T{math.MinInt64})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "overflow_hi", `[9223372036854775808]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "overflow_lo", `[-9223372036854775809]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceUint(t *testing.T) {
+	skipIfNot64bitSystem(t)
+
+	type T = []uint
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, 23, 456 ]`, T{1, 23, 456})
+	s.testOK(t, "max_uint", `[18446744073709551615]`, T{math.MaxUint})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "negative", `[-1]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_hi", `[18446744073709551616]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceUint8(t *testing.T) {
+	skipIfNot64bitSystem(t)
+
+	type T = []uint8
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, 23, 123 ]`, T{1, 23, 123})
+	s.testOK(t, "max_uint", `[255]`, T{math.MaxUint8})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "negative", `[-1]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_hi", `[256]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceUint16(t *testing.T) {
+	skipIfNot64bitSystem(t)
+
+	type T = []uint16
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, 23, 123 ]`, T{1, 23, 123})
+	s.testOK(t, "max_uint", `[65535]`, T{math.MaxUint16})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "negative", `[-1]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_hi", `[65536]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceUint32(t *testing.T) {
+	skipIfNot64bitSystem(t)
+
+	type T = []uint32
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, 23, 123 ]`, T{1, 23, 123})
+	s.testOK(t, "max_uint", `[4294967295]`, T{math.MaxUint32})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "negative", `[-1]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_hi", `[4294967296]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_float", `[1,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+}
+
+func TestDecodeSliceUint64(t *testing.T) {
+	skipIfNot64bitSystem(t)
+
+	type T = []uint64
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ 1, 23, 123 ]`, T{1, 23, 123})
+	s.testOK(t, "max_uint", `[18446744073709551615]`, T{math.MaxUint64})
+	s.testOK(t, "one_item", `[ 1 ]`, T{1})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[ null ]`, T{0})
+	s.testOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
+
+	s.testErr(t, "negative", `[-1]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
+	s.testErr(t, "overflow_hi", `[18446744073709551616]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
 	s.testErr(t, "wrong_type_object", `{}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -653,20 +874,83 @@ func TestDecodeSliceString(t *testing.T) {
 func TestDecodeSliceFloat32(t *testing.T) {
 	type T = []float32
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
-	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
-	s.testOK(t, "2", `[ 0 ]`, T{0})
-	s.testOK(t, "0", `[]`, T{})
-	s.testOK(t, "array_dec_1024_10k", arrayFloat1024)
+	s.testOK(t, "three_items", `[0, 3.14, 2.5]`, T{0, 3.14, 2.5})
+	s.testOK(t, "1", `[1]`, T{1})
+	s.testOK(t, "-1", `[-1]`, T{-1})
+	s.testOK(t, "min_int", `[-16777215]`, T{-16_777_215})
+	s.testOK(t, "max_int", `[16777215]`, T{16_777_215})
+	s.testOK(t, "pi7", `[3.1415927]`, T{3.1415927})
+	s.testOK(t, "-pi7", `[-3.1415927]`, T{-3.1415927})
+	s.testOK(t, "3.4028235e38", `[3.4028235e38]`, T{3.4028235e38})
+	s.testOK(t, "min_pos", `[1.4e-45]`, T{1.4e-45})
+	s.testOK(t, "3.4e38", `[3.4e38]`, T{3.4e38})
+	s.testOK(t, "-3.4e38", `[-3.4e38]`, T{-3.4e38})
+	s.testOK(t, "avogadros_num", `[6.022e23]`, T{6.022e23})
+
+	s.testErrCheck(t, "range_hi", `[3.5e38]`,
+		func(t *testing.T, err jscandec.ErrorDecode) {
+			require.ErrorIs(t, err.Err, strconv.ErrRange)
+			require.Equal(t, 1, err.Index)
+		})
+
+	s.testErr(t, "wrong_type_string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_array", `[1,[]]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
 }
 
 func TestDecodeSliceFloat64(t *testing.T) {
 	type T = []float64
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
-	s.testOK(t, "3", `[ 1, 1.1, 3.1415e5 ]`, T{1, 1.1, 3.1415e5})
-	s.testOK(t, "2", `[ 0 ]`, T{0})
-	s.testOK(t, "2", `[ 9007199254740991 ]`, T{9_007_199_254_740_991})
-	s.testOK(t, "0", `[]`, T{})
-	s.testOK(t, "array_dec_1024_10k", arrayFloat1024)
+	s.testOK(t, "three_items", `[0, 3.14, 2.5]`, T{0, 3.14, 2.5})
+	s.testOK(t, "0", `[0]`, T{0})
+	s.testOK(t, "1", `[1]`, T{1})
+	s.testOK(t, "-1", `[-1]`, T{-1})
+	s.testOK(t, "1.0", `[1.0]`, T{1})
+	s.testOK(t, "1.000000003", `[1.000000003]`, T{1.000000003})
+	s.testOK(t, "max_int", `[9007199254740991]`, T{9_007_199_254_740_991})
+	s.testOK(t, "min_int", `[-9007199254740991]`, T{-9_007_199_254_740_991})
+	s.testOK(t, "pi",
+		`[3.141592653589793238462643383279502884197]`,
+		T{3.141592653589793238462643383279502884197})
+	s.testOK(t, "pi_neg",
+		`[-3.141592653589793238462643383279502884197]`,
+		T{-3.141592653589793238462643383279502884197})
+	s.testOK(t, "3.4028235e38", `[3.4028235e38]`, T{3.4028235e38})
+	s.testOK(t, "exponent", `[1.7976931348623157e308]`, T{1.7976931348623157e308})
+	s.testOK(t, "neg_exponent", `[1.7976931348623157e-308]`, T{1.7976931348623157e-308})
+	s.testOK(t, "1.4e-45", `[1.4e-45]`, T{1.4e-45})
+	s.testOK(t, "neg_exponent", `[-1.7976931348623157e308]`, T{-1.7976931348623157e308})
+	s.testOK(t, "3.4e38", `[3.4e38]`, T{3.4e38})
+	s.testOK(t, "-3.4e38", `[-3.4e38]`, T{-3.4e38})
+	s.testOK(t, "avogadros_num", `[6.022e23]`, T{6.022e23})
+
+	s.testErrCheck(t, "range_hi", `[1e309]`,
+		func(t *testing.T, err jscandec.ErrorDecode) {
+			require.ErrorIs(t, err.Err, strconv.ErrRange)
+			require.Equal(t, 1, err.Index)
+		})
+
+	s.testErr(t, "wrong_type_string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_array", `[1,[]]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
+	s.testErr(t, "wrong_type_element_string", `[1,"nope"]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 3})
 }
 
 func TestDecode2DSliceInt(t *testing.T) {
