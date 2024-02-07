@@ -212,7 +212,7 @@ func TestDecodeAny(t *testing.T) {
 }
 
 func TestDecodeUint(t *testing.T) {
-	require64bitSystem(t)
+	skipIfNot64bitSystem(t)
 	s := newTestSetup[uint](t, *jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
@@ -243,7 +243,7 @@ func TestDecodeUint(t *testing.T) {
 }
 
 func TestDecodeInt(t *testing.T) {
-	require64bitSystem(t)
+	skipIfNot64bitSystem(t)
 	s := newTestSetup[int](t, *jscandec.DefaultOptions)
 	s.testOK(t, "0", `0`, 0)
 	s.testOK(t, "1", `1`, 1)
@@ -1976,9 +1976,10 @@ func BenchmarkSmall(b *testing.B) {
 	})
 }
 
-func require64bitSystem(t *testing.T) {
-	require.Equal(t, uintptr(8), unsafe.Sizeof(int(0)),
-		"this test must run on a 64-bit system")
+func skipIfNot64bitSystem(t *testing.T) {
+	if uintptr(8) != unsafe.Sizeof(int(0)) {
+		t.Skip("this test must run on a 64-bit system")
+	}
 }
 
 // jsonUnmarshalerImpl implements encoding/json.Unmarshaler.
