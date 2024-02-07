@@ -251,6 +251,44 @@ func JscanStruct3[S []byte | string](
 	return s, nil
 }
 
+func JscanStructVector3D[S []byte | string](
+	t *jscan.Tokenizer[S], src S,
+) (s StructVector3D, err error) {
+	errk := t.Tokenize(src, func(tokens []jscan.Token[S]) bool {
+		if tokens[0].Type != jscan.TokenTypeObject {
+			return true
+		}
+		for ti := 1; tokens[ti].Type != jscan.TokenTypeObjectEnd; {
+			switch string(src[tokens[ti].Index+1 : tokens[ti].End-1]) {
+			case "x", "X":
+				ti++
+				if s.X, err = tokens[ti].Float64(src); err != nil {
+					return true
+				}
+			case "y", "Y":
+				ti++
+				if s.Y, err = tokens[ti].Float64(src); err != nil {
+					return true
+				}
+			case "z", "Z":
+				ti++
+				if s.Z, err = tokens[ti].Float64(src); err != nil {
+					return true
+				}
+			}
+			ti++
+		}
+		return false
+	})
+	if errk.IsErr() {
+		if errk.Code == jscan.ErrorCodeCallback {
+			return s, err
+		}
+		return s, errk
+	}
+	return s, nil
+}
+
 func GJSONAny(j []byte) (any, error) {
 	if !gjson.ValidBytes(j) {
 		return nil, errors.New("invalid")
@@ -349,6 +387,43 @@ func GJSONStruct3(j []byte) (s Struct3, err error) {
 	return s, nil
 }
 
+func GJSONStructVector3D(j []byte) (s StructVector3D, err error) {
+	if !gjson.ValidBytes(j) {
+		return s, ErrInvalid
+	}
+	v := gjson.ParseBytes(j)
+	if !v.IsObject() {
+		return s, ErrInvalid
+	}
+	v.ForEach(func(key, value gjson.Result) bool {
+		switch key.Str {
+		case "x", "X":
+			if value.Type != gjson.Number {
+				err = ErrInvalid
+				return false
+			}
+			s.X = value.Float()
+		case "y", "Y":
+			if value.Type != gjson.Number {
+				err = ErrInvalid
+				return false
+			}
+			s.Y = value.Float()
+		case "z", "Z":
+			if value.Type != gjson.Number {
+				err = ErrInvalid
+				return false
+			}
+			s.Z = value.Float()
+		default:
+			err = ErrInvalid
+			return false
+		}
+		return true
+	})
+	return s, nil
+}
+
 func GJSONMapStringString(j []byte) (map[string]string, error) {
 	if !gjson.ValidBytes(j) {
 		return nil, errors.New("invalid")
@@ -429,6 +504,38 @@ func FastjsonStruct3(j []byte) (s Struct3, err error) {
 					return
 				}
 				s.Tags[i] = string(b)
+			}
+		default:
+			err = ErrInvalid
+			return
+		}
+	})
+	return s, nil
+}
+
+func FastjsonStructVector3D(j []byte) (s StructVector3D, err error) {
+	v, err := fastjson.ParseBytes(j)
+	if err != nil {
+		return s, err
+	}
+
+	o, err := v.Object()
+	if err != nil {
+		return s, err
+	}
+	o.Visit(func(key []byte, v *fastjson.Value) {
+		switch string(key) {
+		case "x", "X":
+			if s.X, err = v.Float64(); err != nil {
+				return
+			}
+		case "y", "Y":
+			if s.Y, err = v.Float64(); err != nil {
+				return
+			}
+		case "z", "Z":
+			if s.Z, err = v.Float64(); err != nil {
+				return
 			}
 		default:
 			err = ErrInvalid

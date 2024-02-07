@@ -21,3 +21,5 @@ type Struct3 struct {
 	Number int      `json:"number"`
 	Tags   []string `json:"tags"`
 }
+
+type StructVector3D struct{ X, Y, Z float64 }
