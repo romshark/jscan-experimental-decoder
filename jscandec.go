@@ -1086,28 +1086,45 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
-					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
-						return true
+					if tokens[ti].End-tokens[ti].Index < len("16777216") {
+						// Numbers below this length are guaranteed to be smaller 1<<24
+						// And float32(i32) is faster than calling parseFloat32
+						i32, errParse := tokens[ti].Int32(s)
+						if errParse != nil {
+							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							return true
+						}
+						*(*float32)(p) = float32(i32)
+					} else {
+						v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
+						if errParse != nil {
+							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							return true
+						}
+						*(*float32)(p) = v
 					}
-					*(*float32)(p) = v
 
 				case ExpectTypeFloat64:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					i64, errParse := tokens[ti].Int64(s)
-					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
-						return true
+					if tokens[ti].End-tokens[ti].Index < len("9007199254740992") {
+						// Numbers below this length are guaranteed to be smaller 1<<53
+						// And float64(i64) is faster than calling parseFloat64
+						i64, errParse := tokens[ti].Int64(s)
+						if errParse != nil {
+							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							return true
+						}
+						*(*float64)(p) = float64(i64)
+					} else {
+						v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
+						if errParse != nil {
+							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							return true
+						}
+						*(*float64)(p) = v
 					}
-					// v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
-					// if errParse != nil {
-					// 	err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
-					// 	return true
-					// }
-					*(*float64)(p) = float64(i64)
 
 				default:
 					err = ErrorDecode{
