@@ -77,6 +77,12 @@ const (
 	// ExpectTypeSlice is any slice type
 	ExpectTypeSlice
 
+	// ExpectTypeSliceBool is type `[]bool`
+	ExpectTypeSliceBool
+
+	// ExpectTypeSliceString is type `[]string`
+	ExpectTypeSliceString
+
 	// ExpectTypeSliceInt is type `[]int`
 	ExpectTypeSliceInt
 
@@ -222,6 +228,10 @@ func (t ExpectType) String() string {
 		return "[0]array"
 	case ExpectTypeSlice:
 		return "slice"
+	case ExpectTypeSliceBool:
+		return "[]bool"
+	case ExpectTypeSliceString:
+		return "[]string"
 	case ExpectTypeSliceInt:
 		return "[]int"
 	case ExpectTypeSliceInt8:
@@ -570,6 +580,18 @@ func appendTypeToStack[S []byte | string](
 
 	case reflect.Slice:
 		switch t.Elem().Kind() {
+		case reflect.Bool:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceBool,
+				ParentFrameIndex: noParentFrame,
+			}), nil
+		case reflect.String:
+			return append(stack, stackFrame[S]{
+				Size:             t.Size(),
+				Type:             ExpectTypeSliceString,
+				ParentFrameIndex: noParentFrame,
+			}), nil
 		case reflect.Int:
 			return append(stack, stackFrame[S]{
 				Size:             t.Size(),
@@ -1333,8 +1355,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					u := reflect.NewAt(
 						d.stackExp[si].RType, p,
 					).Interface().(encoding.TextUnmarshaler)
-					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
-					tb := unescape.Valid[S, []byte](tv)
+					tb := unescape.Valid[S, []byte](
+						s[tokens[ti].Index+1 : tokens[ti].End-1],
+					)
 					if errUnmarshal := u.UnmarshalText(tb); errUnmarshal != nil {
 						err = ErrorDecode{
 							Err:   errUnmarshal,
@@ -1343,11 +1366,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						return true
 					}
 				case ExpectTypeAny:
-					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
-					**(**interface{})(unsafe.Pointer(&p)) = unescape.Valid[S, string](tv)
+					**(**interface{})(unsafe.Pointer(&p)) = unescape.Valid[S, string](
+						s[tokens[ti].Index+1 : tokens[ti].End-1],
+					)
 				case ExpectTypeStr:
-					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
-					*(*string)(p) = unescape.Valid[S, string](tv)
+					*(*string)(p) = unescape.Valid[S, string](
+						s[tokens[ti].Index+1 : tokens[ti].End-1],
+					)
 				case ExpectTypeBoolString:
 					switch string(s[tokens[ti].Index+1 : tokens[ti].End-1]) {
 					case "true":
@@ -1735,6 +1760,62 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						d.stackExp[si].Offset = 0
 					}
 					ti++
+
+				case ExpectTypeSliceBool:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]bool, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = false
+						case jscan.TokenTypeTrue:
+							sl[i] = true
+						case jscan.TokenTypeFalse:
+							sl[i] = false
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]bool)(p) = sl
+					goto ON_VAL_END
+
+				case ExpectTypeSliceString:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					sl := make([]string, tokens[ti].Elements)
+
+					tokens := tokens[ti+1 : tokens[ti].End]
+					for i := range tokens {
+						switch tokens[i].Type {
+						case jscan.TokenTypeNull:
+							sl[i] = ""
+						case jscan.TokenTypeString:
+							sl[i] = unescape.Valid[S, string](
+								s[tokens[i].Index+1 : tokens[i].End-1],
+							)
+						default:
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[i].Index,
+							}
+							return true
+						}
+					}
+					ti += len(tokens) + 2
+					*(*[]string)(p) = sl
+					goto ON_VAL_END
 
 				case ExpectTypeSliceInt:
 					p := unsafe.Pointer(
@@ -2124,9 +2205,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeNull:
 							sl[i] = 0
 						case jscan.TokenTypeNumber:
-							tv := s[tokens[i].Index:tokens[i].End]
 							v, errParse := d.parseFloat32(
-								tv,
+								s[tokens[i].Index:tokens[i].End],
 							)
 							if errParse != nil {
 								err = ErrorDecode{Err: errParse, Index: tokens[i].Index}
@@ -2297,8 +2377,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeStruct:
 				SCAN_KEYVALS:
 					for {
-						tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
-						key := unescape.Valid[S, string](tv)
+						key := unescape.Valid[S, string](
+							s[tokens[ti].Index+1 : tokens[ti].End-1],
+						)
 						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
 						if frameIndex == noParentFrame {
 							if options.DisallowUnknownFields {
@@ -2791,8 +2872,9 @@ func decodeAny[S ~[]byte | ~string](
 	case jscan.TokenTypeFalse:
 		return false, tokens[1:], nil
 	case jscan.TokenTypeString:
-		tv := str[tokens[0].Index+1 : tokens[0].End-1]
-		return unescape.Valid[S, string](tv), tokens[1:], nil
+		return unescape.Valid[S, string](
+			str[tokens[0].Index+1 : tokens[0].End-1],
+		), tokens[1:], nil
 	case jscan.TokenTypeArray:
 		l := make([]any, 0, tokens[0].Elements)
 		for tokens = tokens[1:]; tokens[0].Type != jscan.TokenTypeArrayEnd; {

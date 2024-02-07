@@ -865,10 +865,52 @@ func TestDecodeSliceUint64(t *testing.T) {
 func TestDecodeSliceString(t *testing.T) {
 	type T = []string
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
-	s.testOK(t, "3", `[ "a", "ab", "cde" ]`, T{"a", "ab", "cde"})
-	s.testOK(t, "2", `[ "abc" ]`, T{"abc"})
-	s.testOK(t, "0", `[]`, T{})
+	s.testOK(t, "three_items", `[ "a", "", "cde" ]`, T{"a", "", "cde"})
+	s.testOK(t, "one_items", `[ "abc" ]`, T{"abc"})
+	s.testOK(t, "escaped", `[ "\"abc\tdef\"" ]`, T{"\"abc\tdef\""})
+	s.testOK(t, "unicode", `["жзш","ツ!"]`, T{`жзш`, `ツ!`})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[null]`, T{""})
+	s.testOK(t, "null_element_multi", `[null,"okay",null]`, T{"", "okay", ""})
 	s.testOK(t, "array_str_1024_639k", arrayStr1024)
+
+	s.testErr(t, "wrong_type_string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_array", `["okay",[]]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "wrong_type_element_float", `["okay",3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+}
+
+func TestDecodeSliceBool(t *testing.T) {
+	type T = []bool
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
+	s.testOK(t, "three_items", `[ true, false, true ]`, T{true, false, true})
+	s.testOK(t, "one_items", `[ true ]`, T{true})
+	s.testOK(t, "empty", `[]`, T{})
+	s.testOK(t, "null", `null`, T(nil))
+	s.testOK(t, "null_element", `[null]`, T{false})
+	s.testOK(t, "null_element_multi", `[null,true,null]`, T{false, true, false})
+
+	s.testErr(t, "wrong_type_string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "wrong_type_element_array", `[true,[]]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 6})
+	s.testErr(t, "wrong_type_element_float", `[true,3.14]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 6})
 }
 
 func TestDecodeSliceFloat32(t *testing.T) {

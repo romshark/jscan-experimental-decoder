@@ -151,7 +151,7 @@ func TestAppendTypeToStack(t *testing.T) {
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "S1"},
 						{FrameIndex: 4, Name: "Bar"},
-						{FrameIndex: 6, Name: "bazz"},
+						{FrameIndex: 5, Name: "bazz"},
 					},
 					Size:             reflect.TypeOf(S2{}).Size(),
 					Type:             ExpectTypeStruct,
@@ -179,20 +179,35 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // S2.Bar
 					Size:             reflect.TypeOf([]string{}).Size(),
-					Type:             ExpectTypeSlice,
+					Type:             ExpectTypeSliceString,
 					ParentFrameIndex: 0,
 					Offset:           reflect.TypeOf(S2{}).Field(1).Offset,
-				},
-				{ // S2.Bar[]
-					Size:             reflect.TypeOf(string("")).Size(),
-					Type:             ExpectTypeStr,
-					ParentFrameIndex: 4,
 				},
 				{ // S2.Bazz
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
 					ParentFrameIndex: 0,
 					Offset:           reflect.TypeOf(S2{}).Field(3).Offset,
+				},
+			},
+		},
+		{
+			Input: []bool{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]bool{}).Size(),
+					Type:             ExpectTypeSliceBool,
+					ParentFrameIndex: noParentFrame,
+				},
+			},
+		},
+		{
+			Input: []string{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Size:             reflect.TypeOf([]string{}).Size(),
+					Type:             ExpectTypeSliceString,
+					ParentFrameIndex: noParentFrame,
 				},
 			},
 		},
@@ -321,13 +336,8 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Size:             reflect.TypeOf([]string{}).Size(),
-					Type:             ExpectTypeSlice,
+					Type:             ExpectTypeSliceString,
 					ParentFrameIndex: 1,
-				},
-				{
-					Size:             reflect.TypeOf(string("")).Size(),
-					Type:             ExpectTypeStr,
-					ParentFrameIndex: 2,
 				},
 			},
 		},
