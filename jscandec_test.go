@@ -974,6 +974,7 @@ func TestDecodeSliceFloat64(t *testing.T) {
 	s.testOK(t, "3.4e38", `[3.4e38]`, T{3.4e38})
 	s.testOK(t, "-3.4e38", `[-3.4e38]`, T{-3.4e38})
 	s.testOK(t, "avogadros_num", `[6.022e23]`, T{6.022e23})
+	s.testOK(t, "array_float_1024", arrayFloat1024)
 
 	s.testErrCheck(t, "range_hi", `[1e309]`,
 		func(t *testing.T, err jscandec.ErrorDecode) {
