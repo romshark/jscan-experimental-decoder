@@ -1179,10 +1179,10 @@ func TestDecodeMatrix2Int(t *testing.T) {
 		`[[1,2],[3]]`,
 		T{{1, 2}, {3, 0}})
 	s.TestOK(t, "overflow_subarray_ignore",
-		`[[1,2,3,4],[5,6,7,8,9,10]]`,
+		`[[1,2,  3,4],[5,6,  7,8,9,10]]`,
 		T{{1, 2}, {5, 6}})
 	s.TestOK(t, "overflow_ignore",
-		`[[1,2],[3,4],[5,6]]`,
+		`[[1,2],[3,4],  [5,6]]`,
 		T{{1, 2}, {3, 4}})
 }
 
@@ -1201,6 +1201,12 @@ func TestDecodeMatrix4Int(t *testing.T) {
 	s.TestOK(t, "sub_arrays_empty_incomplete",
 		`[[],[]]`,
 		T{{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}})
+	s.TestOK(t, "overflow_subarray_ignore",
+		`[[1,2,3,4,  5],[6,7,8,9,  10,11,12,13,14]]`,
+		T{{1, 2, 3, 4}, {6, 7, 8, 9}})
+	s.TestOK(t, "overflow_ignore",
+		`[[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16],  [17]]`,
+		T{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}})
 }
 
 func TestDecodeEmptyStruct(t *testing.T) {
@@ -1233,6 +1239,15 @@ func TestDecodeSliceEmptyStruct(t *testing.T) {
 	s.TestOK(t, "empty_array", `[]`, []S{})
 	s.TestOK(t, "array_one", `[{}]`, []S{{}})
 	s.TestOK(t, "array_multiple", `[{},{},{}]`, []S{{}, {}, {}})
+
+	s.TestOKPrepare(t, "var_overwrite", `[{}, null, {}]`,
+		func() []S { return []S{{}, {}, {}} }, []S{{}, {}, {}})
+	s.TestOKPrepare(t, "var_nil_realloc", `[{}, null, {}]`,
+		func() []S { return []S(nil) }, []S{{}, {}, {}})
+	s.TestOKPrepare(t, "var_realloc", `[{}, null, {}]`,
+		func() []S { return []S{{}, {}} }, []S{{}, {}, {}})
+	s.TestOKPrepare(t, "var_shrink", `[{}, null, {}]`,
+		func() []S { return []S{{}, {}, {}, {}} }, []S{{}, {}, {}})
 
 	s.testErr(t, "true", `true`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
