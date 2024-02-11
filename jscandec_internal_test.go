@@ -1235,7 +1235,9 @@ func TestAppendTypeToStack(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("%T", td.Input), func(t *testing.T) {
-			actual, err := appendTypeToStack[string](nil, reflect.TypeOf(td.Input))
+			actual, err := appendTypeToStack[string](
+				nil, reflect.TypeOf(td.Input), DefaultInitOptions,
+			)
 			require.NoError(t, err)
 			require.Equal(t, len(td.ExpectStack), len(actual),
 				"unexpected number of frames:", actual)

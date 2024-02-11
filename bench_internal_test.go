@@ -14,7 +14,9 @@ func BenchmarkNewDecoder(b *testing.B) {
 		var err error
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
-			if d, err = NewDecoder[[]byte, [][]bool](tok); err != nil {
+			if d, err = NewDecoder[[]byte, [][]bool](
+				tok, DefaultInitOptions,
+			); err != nil {
 				b.Fatal(err)
 			}
 		}

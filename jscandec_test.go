@@ -41,10 +41,14 @@ func newTestSetup[T any](
 	t *testing.T, decodeOptions jscandec.DecodeOptions,
 ) testSetup[T] {
 	tokenizerString := jscan.NewTokenizer[string](16, 1024)
-	dStr, err := jscandec.NewDecoder[string, T](tokenizerString)
+	dStr, err := jscandec.NewDecoder[string, T](
+		tokenizerString, jscandec.DefaultInitOptions,
+	)
 	require.NoError(t, err)
 	tokenizerBytes := jscan.NewTokenizer[[]byte](16, 1024)
-	dBytes, err := jscandec.NewDecoder[[]byte, T](tokenizerBytes)
+	dBytes, err := jscandec.NewDecoder[[]byte, T](
+		tokenizerBytes, jscandec.DefaultInitOptions,
+	)
 	require.NoError(t, err)
 	return testSetup[T]{
 		decodeOptions: &decodeOptions,
@@ -163,7 +167,9 @@ func (s testSetup[T]) testErrCheck(
 
 func TestDecodeNil(t *testing.T) {
 	tokenizer := jscan.NewTokenizer[string](64, 1024)
-	d, err := jscandec.NewDecoder[string, [][]bool](tokenizer)
+	d, err := jscandec.NewDecoder[string, [][]bool](
+		tokenizer, jscandec.DefaultInitOptions,
+	)
 	require.NoError(t, err)
 	errDec := d.Decode(`"foo"`, nil, jscandec.DefaultOptions)
 	require.True(t, errDec.IsErr())
@@ -2711,7 +2717,9 @@ func TestDecodeJSONUnmarshalerErr(t *testing.T) {
 
 func TestDecodeSyntaxErrorUnexpectedEOF(t *testing.T) {
 	tokenizerString := jscan.NewTokenizer[string](16, 1024)
-	d, err := jscandec.NewDecoder[string, []int](tokenizerString)
+	d, err := jscandec.NewDecoder[string, []int](
+		tokenizerString, jscandec.DefaultInitOptions,
+	)
 	require.NoError(t, err)
 	var v []int
 	errDecode := d.Decode(`[1,2,3`, &v, jscandec.DefaultOptions)
@@ -2725,7 +2733,7 @@ func BenchmarkSmall(b *testing.B) {
 
 	b.Run("jscan", func(b *testing.B) {
 		tok := jscan.NewTokenizer[[]byte](8, 64)
-		d, err := jscandec.NewDecoder[[]byte, [][]bool](tok)
+		d, err := jscandec.NewDecoder[[]byte, [][]bool](tok, jscandec.DefaultInitOptions)
 		if err != nil {
 			b.Fatalf("initializing decoder: %v", err)
 		}
@@ -2786,3 +2794,33 @@ func (impl *textUnmarshalerImplErr) UnmarshalText(text []byte) error {
 }
 
 var errTextUnmarshalerImpl = errors.New("textUnmarshalerImplErr test error")
+
+func TestErrStringTagOptionOnUnsupportedType(t *testing.T) {
+	type S struct {
+		//lint:ignore SA5008 the JSON string option is used intentionally
+		Unsupported map[string]string `json:",string"` //nolint:staticcheck
+	}
+
+	testIn := `{"unsupported":{"not":"okay"}}`
+	var v S
+	require.NoError(t, json.Unmarshal([]byte(testIn), &v))
+
+	t.Run("check_disabled", func(t *testing.T) {
+		tok := jscan.NewTokenizer[string](1, 1)
+		dec, err := jscandec.NewDecoder[string, S](tok, jscandec.DefaultInitOptions)
+		require.NoError(t, err)
+		require.NotNil(t, dec)
+		var v S
+		errDec := dec.Decode(testIn, &v, jscandec.DefaultOptions)
+		require.False(t, errDec.IsErr())
+	})
+
+	t.Run("err", func(t *testing.T) {
+		tok := jscan.NewTokenizer[string](1, 1)
+		opt := *jscandec.DefaultInitOptions
+		opt.DisallowStringTagOptOnUnsupportedTypes = true
+		dec, err := jscandec.NewDecoder[string, S](tok, &opt)
+		require.Equal(t, err, jscandec.ErrStringTagOptionOnUnsupportedType)
+		require.Nil(t, dec)
+	})
+}

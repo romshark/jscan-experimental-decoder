@@ -75,7 +75,7 @@ func TestImplementationsAnyInt(t *testing.T) {
 
 	t.Run("jscan/decoder", func(t *testing.T) {
 		d, err := jscandec.NewDecoder[[]byte, any](
-			jscan.NewTokenizer[[]byte](2048, 2048*1024),
+			jscan.NewTokenizer[[]byte](2048, 2048*1024), jscandec.DefaultInitOptions,
 		)
 		require.NoError(t, err)
 		var v any
@@ -185,7 +185,9 @@ func BenchmarkAnyInt(b *testing.B) {
 
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		d, err := jscandec.NewDecoder[[]byte, any](tokenizer)
+		d, err := jscandec.NewDecoder[[]byte, any](
+			tokenizer, jscandec.DefaultInitOptions,
+		)
 		if err != nil {
 			b.Fatal(err)
 		}

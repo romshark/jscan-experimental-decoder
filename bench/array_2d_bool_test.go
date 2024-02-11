@@ -78,7 +78,7 @@ func TestImplementationsDecode2DArrayBool(t *testing.T) {
 
 	t.Run("jscan/decoder", func(t *testing.T) {
 		d, err := jscandec.NewDecoder[[]byte, [][]bool](
-			jscan.NewTokenizer[[]byte](2048, 2048*1024),
+			jscan.NewTokenizer[[]byte](2048, 2048*1024), jscandec.DefaultInitOptions,
 		)
 		require.NoError(t, err)
 		var v [][]bool
@@ -188,7 +188,9 @@ func BenchmarkDecode2DArrayBool(b *testing.B) {
 
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		d, err := jscandec.NewDecoder[[]byte, [][]bool](tokenizer)
+		d, err := jscandec.NewDecoder[[]byte, [][]bool](
+			tokenizer, jscandec.DefaultInitOptions,
+		)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -415,6 +415,10 @@ type stackFrame[S []byte | string] struct {
 // is very unlikely to reach 4_294_967_295.
 const noParentFrame = math.MaxUint32
 
+var DefaultInitOptions = &InitOptions{
+	DisallowStringTagOptOnUnsupportedTypes: false,
+}
+
 var DefaultOptions = &DecodeOptions{
 	DisallowUnknownFields: false,
 }
@@ -431,7 +435,7 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 	}
 	stack := make([]stackFrame[S], 0, 4)
 	var err error
-	stack, err = appendTypeToStack(stack, reflect.TypeOf(*t))
+	stack, err = appendTypeToStack(stack, reflect.TypeOf(*t), DefaultInitOptions)
 	if err != nil {
 		return err
 	}
@@ -441,6 +445,9 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
 	d.init()
 	if err := d.Decode(s, t, DefaultOptions); err.IsErr() {
+		if err.Err == ErrStringTagOptionOnUnsupportedType {
+			return nil
+		}
 		return err.Err
 	}
 	return nil
@@ -462,6 +469,7 @@ type Decoder[S []byte | string, T any] struct {
 // not be used concurrently!
 func NewDecoder[S []byte | string, T any](
 	tokenizer *jscan.Tokenizer[S],
+	options *InitOptions,
 ) (*Decoder[S, T], error) {
 	d := &Decoder[S, T]{
 		tokenizer: tokenizer,
@@ -470,7 +478,7 @@ func NewDecoder[S []byte | string, T any](
 
 	var z T
 	var err error
-	d.stackExp, err = appendTypeToStack(d.stackExp, reflect.TypeOf(z))
+	d.stackExp, err = appendTypeToStack(d.stackExp, reflect.TypeOf(z), options)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +559,7 @@ func (d *Decoder[S, T]) init() {
 
 // appendTypeToStack will recursively flat-append stack frames recursing into t.
 func appendTypeToStack[S []byte | string](
-	stack []stackFrame[S], t reflect.Type,
+	stack []stackFrame[S], t reflect.Type, options *InitOptions,
 ) ([]stackFrame[S], error) {
 	if t == nil {
 		return append(stack, stackFrame[S]{
@@ -602,7 +610,7 @@ func appendTypeToStack[S []byte | string](
 		})
 		newAtIndex := len(stack)
 		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
 			return nil, err
 		}
 
@@ -714,7 +722,7 @@ func appendTypeToStack[S []byte | string](
 		})
 		newAtIndex := len(stack)
 		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
 			return nil, err
 		}
 
@@ -734,7 +742,7 @@ func appendTypeToStack[S []byte | string](
 		{
 			newAtIndex := len(stack)
 			var err error
-			if stack, err = appendTypeToStack(stack, t.Key()); err != nil {
+			if stack, err = appendTypeToStack(stack, t.Key(), options); err != nil {
 				return nil, err
 			}
 			// Link map key to the map frame.
@@ -743,7 +751,7 @@ func appendTypeToStack[S []byte | string](
 		{
 			newAtIndex := len(stack)
 			var err error
-			if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+			if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
 				return nil, err
 			}
 			// Link map value to the map frame.
@@ -790,7 +798,7 @@ func appendTypeToStack[S []byte | string](
 
 			newAtIndex := uint32(len(stack))
 			var err error
-			stack, err = appendTypeToStack(stack, f.Type)
+			stack, err = appendTypeToStack(stack, f.Type, options)
 			if err != nil {
 				return nil, err
 			}
@@ -840,7 +848,9 @@ func appendTypeToStack[S []byte | string](
 					stack[newAtIndex].Type = ExpectTypeUint64String
 				default:
 					// Using tag option `string` on an unsupported type
-					return nil, ErrStringTagOptionOnUnsupportedType
+					if options.DisallowStringTagOptOnUnsupportedTypes {
+						return nil, ErrStringTagOptionOnUnsupportedType
+					}
 				}
 			}
 		}
@@ -938,7 +948,7 @@ func appendTypeToStack[S []byte | string](
 		})
 		newAtIndex := len(stack)
 		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem()); err != nil {
+		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
 			return nil, err
 		}
 		stack[newAtIndex].ParentFrameIndex = parentIndex
@@ -994,7 +1004,18 @@ func determineTextUnmarshalerSupport(t reflect.Type) interfaceSupport {
 	return interfaceSupportNone
 }
 
+// InitOptions are options for the constructor function NewDecoder[S, T].
+type InitOptions struct {
+	// DisallowStringTagOptOnUnsupportedTypes will make NewDecoder return
+	// ErrStringTagOptionOnUnsupportedType if a `json:",string"` struct tag option is
+	// used on an unsupported type.
+	DisallowStringTagOptOnUnsupportedTypes bool
+}
+
+// DecodeOptions are options for the method *Decoder[S, T].Decode.
 type DecodeOptions struct {
+	// DisallowUnknownFields will make Decode return ErrUnknownField
+	// when encountering an unknown struct field.
 	DisallowUnknownFields bool
 }
 

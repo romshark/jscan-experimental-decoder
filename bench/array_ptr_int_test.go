@@ -81,7 +81,7 @@ func TestImplementationsPtrInt(t *testing.T) {
 
 	t.Run("jscan/decoder", func(t *testing.T) {
 		d, err := jscandec.NewDecoder[[]byte, *int](
-			jscan.NewTokenizer[[]byte](1, 1),
+			jscan.NewTokenizer[[]byte](1, 1), jscandec.DefaultInitOptions,
 		)
 		require.NoError(t, err)
 		var v *int
@@ -202,7 +202,9 @@ func BenchmarkPtrInt(b *testing.B) {
 
 	b.Run("jscan/decoder", func(b *testing.B) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		d, err := jscandec.NewDecoder[[]byte, *int](tokenizer)
+		d, err := jscandec.NewDecoder[[]byte, *int](
+			tokenizer, jscandec.DefaultInitOptions,
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
