@@ -1509,6 +1509,15 @@ func TestDecodeStruct(t *testing.T) {
 	s.TestOK(t, "empty", `{}`, S{})
 	s.TestOK(t, "name_mismatch", `{"faz":42,"baz":"bazz"}`, S{})
 
+	s.TestOKPrepare(t, "overwrite", `{"foo":42,"bar":"bazz"}`,
+		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 42, Bar: "bazz"})
+	s.TestOKPrepare(t, "overwrite_foo", `{"foo":42}`,
+		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 42, Bar: "predefined"})
+	s.TestOKPrepare(t, "overwrite_bar", `{"bar":"newval"}`,
+		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 99, Bar: "newval"})
+	s.TestOKPrepare(t, "unknown_field_overwrite", `{"fazz":false}`,
+		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 99, Bar: "predefined"})
+
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "array", `[]`,
