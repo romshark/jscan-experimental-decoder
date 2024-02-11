@@ -1558,6 +1558,9 @@ func TestDecodeStringTagBool(t *testing.T) {
 	s.TestOK(t, "true",
 		`{"bool":"true"}`, S{Bool: true})
 
+	s.TestOK(t, "empty", `{}`, S{})
+	s.TestOK(t, "null", `null`, S{})
+
 	s.testErr(t, "empty", `{"bool":""}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
 	s.testErr(t, "text", `{"bool":"text"}`,
@@ -1579,9 +1582,6 @@ func TestDecodeStringTagBool(t *testing.T) {
 	s.testErr(t, "suffix_false", `{"bool":"truefalse"}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
 
-	s.TestOK(t, "empty", `{}`, S{})
-	s.TestOK(t, "null", `null`, S{})
-
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "array", `[]`,
@@ -1602,6 +1602,9 @@ func TestDecodeStringTagString(t *testing.T) {
 	s.TestOK(t, "text",
 		`{"string":"\"text\""}`, S{String: "text"})
 
+	s.TestOK(t, "empty", `{}`, S{})
+	s.TestOK(t, "null", `null`, S{})
+
 	s.testErr(t, "empty", `{"string":""}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 10})
 	s.testErr(t, "space_prefix", `{"string":" \"\""}`,
@@ -1616,9 +1619,6 @@ func TestDecodeStringTagString(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 10})
 	s.testErr(t, "suffix_text", `{"string":"\"ok\"\"ay\""}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 10})
-
-	s.TestOK(t, "empty", `{}`, S{})
-	s.TestOK(t, "null", `null`, S{})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
