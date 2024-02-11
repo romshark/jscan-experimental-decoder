@@ -415,10 +415,12 @@ type stackFrame[S []byte | string] struct {
 // is very unlikely to reach 4_294_967_295.
 const noParentFrame = math.MaxUint32
 
+// DefaultInitOptions are to be used by default. DO NOT MUTATE.
 var DefaultInitOptions = &InitOptions{
 	DisallowStringTagOptOnUnsupportedTypes: false,
 }
 
+// DefaultOptions are to be used by default. DO NOT MUTATE.
 var DefaultOptions = &DecodeOptions{
 	DisallowUnknownFields: false,
 }
