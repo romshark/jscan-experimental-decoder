@@ -1696,7 +1696,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeEmptyStruct:
 					// Nothing
 				case ExpectTypeAny:
-					// Nothing
+					*(*any)(p) = nil
 				case ExpectTypeMap:
 					*(*map[any]any)(p) = nil
 				case ExpectTypeSlice:

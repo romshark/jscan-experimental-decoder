@@ -219,6 +219,38 @@ func TestDecodeAny(t *testing.T) {
 		"null":        nil,
 	})
 
+	s.TestOKPrepare(t, "overwrite_int->bool", `true`,
+		func() any { return int(42) }, true)
+	s.TestOKPrepare(t, "overwrite_bool->float64", `42`,
+		func() any { return true }, float64(42))
+
+	{
+		type S struct {
+			ID   int
+			Name string
+		}
+		s.TestOKPrepare(t, "overwrite_S->map", `{"id":42,"name":"John"}`,
+			func() any { return S{ID: 1, Name: "Alice"} },
+			map[string]any{"id": float64(42), "name": "John"},
+		)
+		s.TestOKPrepare(t, "overwrite_slice", `42`,
+			func() any {
+				return []S{
+					{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"},
+				}
+			},
+			float64(42))
+
+		s.TestOKPrepare(t, "overwrite_sliceS->map", `[{"name":"John"}]`,
+			func() any { return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}} },
+			[]any{map[string]any{"name": "John"}},
+		)
+		s.TestOKPrepare(t, "no_overwrite_null", `null`,
+			func() any { return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}} },
+			any(nil),
+		)
+	}
+
 	s.testErrCheck(t, "float_range_hi", `1e309`,
 		func(t *testing.T, err jscandec.ErrorDecode) {
 			require.ErrorIs(t, err.Err, strconv.ErrRange)
