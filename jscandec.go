@@ -1697,6 +1697,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Nothing
 				case ExpectTypeAny:
 					// Nothing
+				case ExpectTypeMap:
+					*(*map[any]any)(p) = nil
 				case ExpectTypeSlice:
 					// Skip
 				case ExpectTypeStruct:
@@ -2602,10 +2604,16 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					d.stackExp[si].MapValue = reflect.MakeMapWithSize(
-						d.stackExp[si].RType, tokens[ti].Elements,
-					)
-					*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
+					if *(*map[any]any)(p) != nil {
+						d.stackExp[si].MapValue = reflect.NewAt(
+							d.stackExp[si].RType, p,
+						).Elem()
+					} else {
+						d.stackExp[si].MapValue = reflect.MakeMapWithSize(
+							d.stackExp[si].RType, tokens[ti].Elements,
+						)
+						*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
+					}
 					if tokens[ti].Elements == 0 {
 						ti += 2
 						goto ON_VAL_END

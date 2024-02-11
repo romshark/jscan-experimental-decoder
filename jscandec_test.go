@@ -2121,6 +2121,13 @@ func TestDecodeMapIntToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "-123456789":123456789}`,
 		M{0: 0, 42: 42, -123456789: 123456789})
 
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+
 	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
 	s.testErr(t, "overflow_lo", `{"-9223372036854775809":0}`,
@@ -2144,6 +2151,13 @@ func TestDecodeMapInt8ToString(t *testing.T) {
 	s.TestOK(t, "null", `null`, M(nil))
 	s.TestOK(t, "min_and_max", `{"0":0, "-128":-128, "127":127}`,
 		M{0: 0, -128: -128, 127: 127})
+
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
 
 	s.testErr(t, "overflow_hi", `{"128":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2169,6 +2183,13 @@ func TestDecodeMapInt16ToString(t *testing.T) {
 	s.TestOK(t, "min_and_max", `{"0":0, "-32768":-32768, "32767":32767}`,
 		M{0: 0, -32768: -32768, 32767: 32767})
 
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+
 	s.testErr(t, "overflow_hi", `{"32768":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
 	s.testErr(t, "overflow_lo", `{"-32769":0}`,
@@ -2193,6 +2214,13 @@ func TestDecodeMapInt32ToString(t *testing.T) {
 	s.TestOK(t, "min_and_max", `{"0":0,
 		"-2147483648":-2147483648, "2147483647":2147483647}`,
 		M{0: 0, -2147483648: -2147483648, 2147483647: 2147483647})
+
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
 
 	s.testErr(t, "overflow_hi", `{"2147483648":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2224,6 +2252,13 @@ func TestDecodeMapInt64ToString(t *testing.T) {
 			9223372036854775807:  9223372036854775807,
 		})
 
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+
 	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
 	s.testErr(t, "overflow_lo", `{"-9223372036854775809":0}`,
@@ -2247,6 +2282,13 @@ func TestDecodeMapUintToString(t *testing.T) {
 	s.TestOK(t, "null", `null`, M(nil))
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
 		M{0: 0, 42: 42, 18446744073709551615: 1})
+
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
 
 	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2272,6 +2314,13 @@ func TestDecodeMapUint8ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "255":1}`,
 		M{0: 0, 42: 42, 255: 1})
 
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+
 	s.testErr(t, "overflow", `{"256":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
 	s.testErr(t, "negative", `{"-1":0}`,
@@ -2295,6 +2344,13 @@ func TestDecodeMapUint16ToString(t *testing.T) {
 	s.TestOK(t, "null", `null`, M(nil))
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "65535":1}`,
 		M{0: 0, 42: 42, 65535: 1})
+
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
 
 	s.testErr(t, "overflow", `{"65536":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2320,6 +2376,13 @@ func TestDecodeMapUint32ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "4294967295":1}`,
 		M{0: 0, 42: 42, 4294967295: 1})
 
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+
 	s.testErr(t, "overflow", `{"4294967296":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
 	s.testErr(t, "negative", `{"-1":0}`,
@@ -2343,6 +2406,13 @@ func TestDecodeMapUint64ToString(t *testing.T) {
 	s.TestOK(t, "null", `null`, M(nil))
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
 		M{0: 0, 42: 42, 18446744073709551615: 1})
+
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
+		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
 
 	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2400,6 +2470,17 @@ func TestDecodeMapStringToMapStringToString(t *testing.T) {
 	s.TestOK(t, "escaped",
 		`{" \b " : {" \" ":" \u30C4 "} }`, M{" \b ": M2{` " `: ` ツ `}})
 
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
+		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
+		M{"a": {}, "b": {"b1": "b1_v"}})
+	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"a2":"NEWVAL"}}`,
+		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
+		M{"a": {"a2": "NEWVAL"}, "b": {"b1": "b1_v"}})
+	s.TestOKPrepare(t, "overwrite_all",
+		`{"a": {"a2":"NEWVAL1","a1":"NEWVAL2"}, "b": {"b1": "NEWVAL3", "bNEW": "NV3"} }`,
+		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
+		M{"a": {"a1": "NEWVAL2", "a2": "NEWVAL1"}, "b": {"b1": "NEWVAL3", "bNEW": "NV3"}})
+
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "string", `"text"`,
@@ -2436,6 +2517,22 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 			"x": S{Name: "first", ID: 1},
 			"y": S{Name: "second", ID: 2},
 		})
+
+	s.TestOKPrepare(t, "overwrite_null", `null`,
+		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
+		M(nil))
+	s.TestOKPrepare(t, "no_overwrite_empty", `{}`,
+		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
+		M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}})
+	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"id":3, "name":"Bob"}}`,
+		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
+		M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}, "c": {Name: "Bob", ID: 3}})
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
+		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
+		M{"a": {}, "b": {Name: "b1", ID: 2}})
+	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"id":42}}`,
+		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
+		M{"a": {ID: 42}, "b": {Name: "b1", ID: 2}})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
