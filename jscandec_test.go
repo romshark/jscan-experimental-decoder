@@ -1546,6 +1546,50 @@ func TestDecodeStructFields(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeStringTagBool(t *testing.T) {
+	type S struct {
+		Bool bool `json:",string"`
+	}
+	s := newTestSetup[S](t, *jscandec.DefaultOptions)
+	s.TestOK(t, "empty_string",
+		`{"bool":null}`, S{Bool: false})
+	s.TestOK(t, "false",
+		`{"bool":"false"}`, S{Bool: false})
+	s.TestOK(t, "true",
+		`{"bool":"true"}`, S{Bool: true})
+
+	s.testErr(t, "empty", `{"bool":""}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "text", `{"bool":"text"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "one", `{"bool":"1"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "zero", `{"bool":"0"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "space_prefix", `{"bool":" true"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "space_suffix", `{"bool":"true "}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "multiple_values", `{"bool":"true true"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "suffix_new_line", `{"bool":"true\n"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "suffix_text", `{"bool":"trueabc"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+	s.testErr(t, "suffix_false", `{"bool":"truefalse"}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 8})
+
+	s.TestOK(t, "empty", `{}`, S{})
+	s.TestOK(t, "null", `null`, S{})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeStringTagString(t *testing.T) {
 	type S struct {
 		String string `json:",string"`
