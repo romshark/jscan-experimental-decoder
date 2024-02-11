@@ -1041,6 +1041,9 @@ func TestDecodeSliceFloat32(t *testing.T) {
 	type T = []float32
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "three_items", `[0, 3.14, 2.5]`, T{0, 3.14, 2.5})
+	s.TestOK(t, "null", `null`, T(nil))
+	s.TestOK(t, "empty", `[]`, T{})
+	s.TestOK(t, "zero", `[0]`, T{0})
 	s.TestOK(t, "1", `[1]`, T{1})
 	s.TestOK(t, "-1", `[-1]`, T{-1})
 	s.TestOK(t, "min_int", `[-16777215]`, T{-16_777_215})
@@ -1088,6 +1091,8 @@ func TestDecodeSliceFloat64(t *testing.T) {
 	type T = []float64
 	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "three_items", `[0, 3.14, 2.5]`, T{0, 3.14, 2.5})
+	s.TestOK(t, "null", `null`, T(nil))
+	s.TestOK(t, "empty", `[]`, T{})
 	s.TestOK(t, "0", `[0]`, T{0})
 	s.TestOK(t, "1", `[1]`, T{1})
 	s.TestOK(t, "-1", `[-1]`, T{-1})
