@@ -33,5 +33,4 @@ Roadmap:
 - [x] Pointers
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
-- [ ] Write to pointed variable (map destination variable to decoder stack)
 - [ ] `encoding/json` compatible drop-in replacement package `jscandec/std`
