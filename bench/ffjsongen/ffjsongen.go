@@ -6,6 +6,10 @@ type Any struct {
 	Data any `json:"data"`
 }
 
+type PtrInt struct {
+	Data *int `json:"data"`
+}
+
 type BoolMatrix struct {
 	Data [][]bool `json:"data"`
 }

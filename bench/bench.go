@@ -145,6 +145,23 @@ func JscanIntSlice[S []byte | string](
 	return s, nil
 }
 
+func JscanPtrInt[S []byte | string](
+	t *jscan.Tokenizer[S], str S,
+) (s *int, err error) {
+	var i int
+	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+		i, err = tokens[0].Int(str)
+		return err != nil
+	})
+	if errk.IsErr() {
+		if errk.Code == jscan.ErrorCodeCallback {
+			return nil, err
+		}
+		return nil, errk
+	}
+	return &i, nil
+}
+
 func JscanStringSlice[S []byte | string](
 	t *jscan.Tokenizer[S], str S,
 ) (s []string, err error) {
@@ -291,14 +308,26 @@ func JscanStructVector3D[S []byte | string](
 
 func GJSONAny(j []byte) (any, error) {
 	if !gjson.ValidBytes(j) {
-		return nil, errors.New("invalid")
+		return nil, ErrInvalid
 	}
 	return gjson.ParseBytes(j).Value(), nil
 }
 
+func GJSONPtrInt(j []byte) (*int, error) {
+	if !gjson.ValidBytes(j) {
+		return nil, ErrInvalid
+	}
+	r := gjson.ParseBytes(j)
+	if r.Type != gjson.Number {
+		return nil, ErrInvalid
+	}
+	i := int(r.Int())
+	return &i, nil
+}
+
 func GJSONArrayBool2D(j []byte) ([][]bool, error) {
 	if !gjson.ValidBytes(j) {
-		return nil, errors.New("invalid")
+		return nil, ErrInvalid
 	}
 	l1 := gjson.ParseBytes(j).Array()
 	matrix := make([][]bool, 0, len(l1))
@@ -426,7 +455,7 @@ func GJSONStructVector3D(j []byte) (s StructVector3D, err error) {
 
 func GJSONMapStringString(j []byte) (map[string]string, error) {
 	if !gjson.ValidBytes(j) {
-		return nil, errors.New("invalid")
+		return nil, ErrInvalid
 	}
 	r := gjson.ParseBytes(j).Map()
 	m := make(map[string]string, len(r))
@@ -464,6 +493,18 @@ func FastjsonArrayString(j []byte) ([]string, error) {
 		a[i] = string(s)
 	}
 	return a, nil
+}
+
+func FastjsonPtrInt(j []byte) (*int, error) {
+	v, err := fastjson.ParseBytes(j)
+	if err != nil {
+		return nil, err
+	}
+	i, err := v.Int()
+	if err != nil {
+		return nil, err
+	}
+	return &i, nil
 }
 
 func FastjsonStruct3(j []byte) (s Struct3, err error) {

@@ -307,7 +307,85 @@ func (v *StringArray) UnmarshalJSON(data []byte) error {
 func (v *StringArray) UnmarshalEasyJSON(l *jlexer.Lexer) {
 	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen2(l, v)
 }
-func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(in *jlexer.Lexer, out *MapStringString) {
+func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(in *jlexer.Lexer, out *PtrInt) {
+	isTopLevel := in.IsStart()
+	if in.IsNull() {
+		if isTopLevel {
+			in.Consumed()
+		}
+		in.Skip()
+		return
+	}
+	in.Delim('{')
+	for !in.IsDelim('}') {
+		key := in.UnsafeFieldName(false)
+		in.WantColon()
+		if in.IsNull() {
+			in.Skip()
+			in.WantComma()
+			continue
+		}
+		switch key {
+		case "data":
+			if in.IsNull() {
+				in.Skip()
+				out.Data = nil
+			} else {
+				if out.Data == nil {
+					out.Data = new(int)
+				}
+				*out.Data = int(in.Int())
+			}
+		default:
+			in.SkipRecursive()
+		}
+		in.WantComma()
+	}
+	in.Delim('}')
+	if isTopLevel {
+		in.Consumed()
+	}
+}
+func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(out *jwriter.Writer, in PtrInt) {
+	out.RawByte('{')
+	first := true
+	_ = first
+	{
+		const prefix string = ",\"data\":"
+		out.RawString(prefix[1:])
+		if in.Data == nil {
+			out.RawString("null")
+		} else {
+			out.Int(int(*in.Data))
+		}
+	}
+	out.RawByte('}')
+}
+
+// MarshalJSON supports json.Marshaler interface
+func (v PtrInt) MarshalJSON() ([]byte, error) {
+	w := jwriter.Writer{}
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(&w, v)
+	return w.Buffer.BuildBytes(), w.Error
+}
+
+// MarshalEasyJSON supports easyjson.Marshaler interface
+func (v PtrInt) MarshalEasyJSON(w *jwriter.Writer) {
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(w, v)
+}
+
+// UnmarshalJSON supports json.Unmarshaler interface
+func (v *PtrInt) UnmarshalJSON(data []byte) error {
+	r := jlexer.Lexer{Data: data}
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(&r, v)
+	return r.Error()
+}
+
+// UnmarshalEasyJSON supports easyjson.Unmarshaler interface
+func (v *PtrInt) UnmarshalEasyJSON(l *jlexer.Lexer) {
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(l, v)
+}
+func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(in *jlexer.Lexer, out *MapStringString) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -352,7 +430,7 @@ func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 		in.Consumed()
 	}
 }
-func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(out *jwriter.Writer, in MapStringString) {
+func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(out *jwriter.Writer, in MapStringString) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -383,27 +461,27 @@ func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 // MarshalJSON supports json.Marshaler interface
 func (v MapStringString) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(&w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v MapStringString) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *MapStringString) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(&r, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *MapStringString) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen3(l, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(l, v)
 }
-func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(in *jlexer.Lexer, out *IntArray) {
+func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(in *jlexer.Lexer, out *IntArray) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -455,7 +533,7 @@ func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 		in.Consumed()
 	}
 }
-func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(out *jwriter.Writer, in IntArray) {
+func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(out *jwriter.Writer, in IntArray) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -481,27 +559,27 @@ func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 // MarshalJSON supports json.Marshaler interface
 func (v IntArray) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(&w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v IntArray) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *IntArray) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(&r, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *IntArray) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen4(l, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(l, v)
 }
-func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(in *jlexer.Lexer, out *BoolMatrix) {
+func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(in *jlexer.Lexer, out *BoolMatrix) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -574,7 +652,7 @@ func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 		in.Consumed()
 	}
 }
-func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(out *jwriter.Writer, in BoolMatrix) {
+func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(out *jwriter.Writer, in BoolMatrix) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -611,27 +689,27 @@ func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 // MarshalJSON supports json.Marshaler interface
 func (v BoolMatrix) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(&w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v BoolMatrix) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *BoolMatrix) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(&r, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *BoolMatrix) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen5(l, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(l, v)
 }
-func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(in *jlexer.Lexer, out *Any) {
+func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(in *jlexer.Lexer, out *Any) {
 	isTopLevel := in.IsStart()
 	if in.IsNull() {
 		if isTopLevel {
@@ -668,7 +746,7 @@ func easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 		in.Consumed()
 	}
 }
-func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(out *jwriter.Writer, in Any) {
+func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(out *jwriter.Writer, in Any) {
 	out.RawByte('{')
 	first := true
 	_ = first
@@ -689,23 +767,23 @@ func easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjson
 // MarshalJSON supports json.Marshaler interface
 func (v Any) MarshalJSON() ([]byte, error) {
 	w := jwriter.Writer{}
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(&w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(&w, v)
 	return w.Buffer.BuildBytes(), w.Error
 }
 
 // MarshalEasyJSON supports easyjson.Marshaler interface
 func (v Any) MarshalEasyJSON(w *jwriter.Writer) {
-	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(w, v)
+	easyjson64a62fcEncodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(w, v)
 }
 
 // UnmarshalJSON supports json.Unmarshaler interface
 func (v *Any) UnmarshalJSON(data []byte) error {
 	r := jlexer.Lexer{Data: data}
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(&r, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(&r, v)
 	return r.Error()
 }
 
 // UnmarshalEasyJSON supports easyjson.Unmarshaler interface
 func (v *Any) UnmarshalEasyJSON(l *jlexer.Lexer) {
-	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen6(l, v)
+	easyjson64a62fcDecodeGithubComRomsharkJscanExperimentalDecoderBenchEasyjsongen7(l, v)
 }
