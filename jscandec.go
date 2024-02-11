@@ -77,6 +77,9 @@ const (
 	// ExpectTypeSlice is any slice type
 	ExpectTypeSlice
 
+	// ExpectTypeSliceEmptyStruct is type `[]struct{}`
+	ExpectTypeSliceEmptyStruct
+
 	// ExpectTypeSliceBool is type `[]bool`
 	ExpectTypeSliceBool
 
@@ -228,6 +231,8 @@ func (t ExpectType) String() string {
 		return "[0]array"
 	case ExpectTypeSlice:
 		return "slice"
+	case ExpectTypeSliceEmptyStruct:
+		return "[]struct{}"
 	case ExpectTypeSliceBool:
 		return "[]bool"
 	case ExpectTypeSliceString:
@@ -318,6 +323,33 @@ func (t ExpectType) String() string {
 		return "string(uint64)"
 	}
 	return ""
+}
+
+// isElemComposite returns false for non-composite slice item types,
+// otherwise returns true.
+func (t ExpectType) isElemComposite() bool {
+	switch t {
+	case ExpectTypePtr,
+		ExpectTypeArrayLen0, // Zero-length arrays require no memory
+		ExpectTypeEmptyStruct,
+		ExpectTypeBool,
+		ExpectTypeStr,
+		ExpectTypeFloat32,
+		ExpectTypeFloat64,
+		ExpectTypeInt,
+		ExpectTypeInt8,
+		ExpectTypeInt16,
+		ExpectTypeInt32,
+		ExpectTypeInt64,
+		ExpectTypeUint,
+		ExpectTypeUint8,
+		ExpectTypeUint16,
+		ExpectTypeUint32,
+		ExpectTypeUint64:
+		return false
+		// Types such as `ExpectTypeBoolString` will never be used for slice items.
+	}
+	return true
 }
 
 // fieldStackFrame identifies a field within a struct frame.
@@ -580,6 +612,14 @@ func appendTypeToStack[S []byte | string](
 
 	case reflect.Slice:
 		switch t.Elem().Kind() {
+		case reflect.Struct:
+			if t.Elem().Size() < 1 {
+				return append(stack, stackFrame[S]{
+					Size:             t.Size(),
+					Type:             ExpectTypeSliceEmptyStruct,
+					ParentFrameIndex: noParentFrame,
+				}), nil
+			}
 		case reflect.Bool:
 			return append(stack, stackFrame[S]{
 				Size:             t.Size(),
@@ -1689,6 +1729,34 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*uint32)(p) = zeroUint32
 				case ExpectTypeUint64:
 					*(*uint64)(p) = zeroUint64
+				case ExpectTypeSliceBool:
+					*(*[]bool)(p) = nil
+				case ExpectTypeSliceString:
+					*(*[]string)(p) = nil
+				case ExpectTypeSliceFloat32:
+					*(*[]float32)(p) = nil
+				case ExpectTypeSliceFloat64:
+					*(*[]float64)(p) = nil
+				case ExpectTypeSliceInt:
+					*(*[]int)(p) = nil
+				case ExpectTypeSliceInt8:
+					*(*[]int8)(p) = nil
+				case ExpectTypeSliceInt16:
+					*(*[]int16)(p) = nil
+				case ExpectTypeSliceInt32:
+					*(*[]int32)(p) = nil
+				case ExpectTypeSliceInt64:
+					*(*[]int64)(p) = nil
+				case ExpectTypeSliceUint:
+					*(*[]uint)(p) = nil
+				case ExpectTypeSliceUint8:
+					*(*[]uint8)(p) = nil
+				case ExpectTypeSliceUint16:
+					*(*[]uint16)(p) = nil
+				case ExpectTypeSliceUint32:
+					*(*[]uint32)(p) = nil
+				case ExpectTypeSliceUint64:
+					*(*[]uint64)(p) = nil
 				}
 				ti++
 				goto ON_VAL_END
@@ -1738,35 +1806,74 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					elementSize := d.stackExp[si+1].Size
+					elems := uintptr(tokens[ti].Elements)
 
-					if elems := uintptr(tokens[ti].Elements); elems == 0 {
+					if elems == 0 {
 						// Allocate empty slice
-						dp := emptyStructAddr
+						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
-							dp = allocate(elementSize)
+							emptySlice.Data = allocate(elementSize)
 						}
-						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: 0, Cap: 0}
+						*(*sliceHeader)(p) = emptySlice
 						ti += 2
 						goto ON_VAL_END
-					} else {
-						dp := emptyStructAddr
-						if elementSize > 0 {
-							dp = allocate(elems * elementSize)
-						}
-						*(*sliceHeader)(p) = sliceHeader{Data: dp, Len: elems, Cap: elems}
+					}
 
-						si++
-						d.stackExp[si].Dest = dp
-						d.stackExp[si].Offset = 0
+					var dp unsafe.Pointer
+					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
+						sh := sliceHeader{Data: emptyStructAddr, Len: elems, Cap: elems}
+						allocated := make([]byte, elems*elementSize)
+						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
+							// Must copy existing data because it's not guarenteed
+							// that the existing data will be fully overwritten.
+							copy(allocated, *(*[]byte)(unsafe.Pointer(&sliceHeader{
+								Data: h.Data,
+								Len:  h.Len * elementSize,
+								Cap:  h.Cap * elementSize,
+							})))
+						}
+						sh.Data = unsafe.Pointer(&allocated[0])
+						*(*sliceHeader)(p) = sh
+						dp = sh.Data
+					} else {
+						(*sliceHeader)(p).Len = uintptr(tokens[ti].Elements)
+						dp = (*sliceHeader)(p).Data
 					}
 					ti++
+					si++
+					d.stackExp[si].Dest = dp
+					d.stackExp[si].Offset = 0
+
+				case ExpectTypeSliceEmptyStruct:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					*(*sliceHeader)(p) = sliceHeader{
+						Data: emptyStructAddr,
+						Len:  uintptr(tokens[ti].Elements),
+						Cap:  uintptr(tokens[ti].Elements),
+					}
+					ti = tokens[ti].End + 1
+					goto ON_VAL_END
 
 				case ExpectTypeSliceBool:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]bool, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]bool)(p) = []bool{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]bool)(p)
+					if cap(sl) < elems {
+						sl = make([]bool, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1794,7 +1901,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]string, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]string)(p) = []string{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]string)(p)
+					if cap(sl) < elems {
+						sl = make([]string, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1822,7 +1941,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]int, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]int)(p) = []int{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]int)(p)
+					if cap(sl) < elems {
+						sl = make([]int, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1856,7 +1987,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]int8, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]int8)(p) = []int8{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]int8)(p)
+					if cap(sl) < elems {
+						sl = make([]int8, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1890,7 +2033,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]int16, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]int16)(p) = []int16{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]int16)(p)
+					if cap(sl) < elems {
+						sl = make([]int16, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1924,7 +2079,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]int32, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]int32)(p) = []int32{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]int32)(p)
+					if cap(sl) < elems {
+						sl = make([]int32, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1958,7 +2125,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]int64, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]int64)(p) = []int64{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]int64)(p)
+					if cap(sl) < elems {
+						sl = make([]int64, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -1992,7 +2171,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]uint, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]uint)(p) = []uint{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]uint)(p)
+					if cap(sl) < elems {
+						sl = make([]uint, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2033,7 +2224,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]uint8, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]uint8)(p) = []uint8{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]uint8)(p)
+					if cap(sl) < elems {
+						sl = make([]uint8, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2074,7 +2277,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]uint16, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]uint16)(p) = []uint16{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]uint16)(p)
+					if cap(sl) < elems {
+						sl = make([]uint16, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2115,7 +2330,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]uint32, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]uint32)(p) = []uint32{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]uint32)(p)
+					if cap(sl) < elems {
+						sl = make([]uint32, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2156,7 +2383,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]uint64, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]uint64)(p) = []uint64{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]uint64)(p)
+					if cap(sl) < elems {
+						sl = make([]uint64, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2197,7 +2436,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]float32, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]float32)(p) = []float32{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]float32)(p)
+					if cap(sl) < elems {
+						sl = make([]float32, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
@@ -2254,7 +2505,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					sl := make([]float64, tokens[ti].Elements)
+					elems := tokens[ti].Elements
+					if elems < 1 {
+						*(*[]float64)(p) = []float64{}
+						ti += 2
+						goto ON_VAL_END
+					}
+
+					sl := *(*[]float64)(p)
+					if cap(sl) < elems {
+						sl = make([]float64, elems)
+					} else {
+						sl = sl[:elems]
+					}
 
 					tokens := tokens[ti+1 : tokens[ti].End]
 					for i := range tokens {
