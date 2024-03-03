@@ -2582,6 +2582,56 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 5})
 }
 
+func TestDecodeMapStringStruct512(t *testing.T) {
+	type D [512]byte
+	type S struct{ Data D }
+	type M map[string]S
+	s := newTestSetup[M](t, *jscandec.DefaultOptions)
+	s.TestOK(t, "empty", `{}`, M{})
+	s.TestOK(t, "null", `null`, M(nil))
+	s.TestOK(t, "one",
+		`{"x":{"data":[1,2,3]}}`, M{"x": S{Data: D{0: 1, 1: 2, 2: 3}}})
+	s.TestOK(t, "empty_struct",
+		`{"x":{}}`, M{"x": {}})
+	s.TestOK(t, "null_value",
+		`{"":null}`, M{"": {}})
+	s.TestOK(t, "escaped_key",
+		`{"\u30c4":{}}`, M{`ツ`: {}})
+	s.TestOK(t, "multiple",
+		`{
+			"x":{"data":[0,1,2]},
+			"y":{"data":[3,4]}
+		}`, M{
+			"x": S{Data: D{0: 0, 1: 1, 2: 2}},
+			"y": S{Data: D{0: 3, 1: 4}},
+		})
+
+	s.TestOKPrepare(t, "overwrite_null", `null`,
+		func() M { return M{"a": S{Data: D{0}}, "b": {Data: D{0}}} },
+		M(nil))
+	s.TestOKPrepare(t, "no_overwrite_empty", `{}`,
+		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
+		M{"a": {Data: D{0}}, "b": {Data: D{1}}})
+	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"data":[1]}}`,
+		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{0}}} },
+		M{"a": {Data: D{0}}, "b": {Data: D{0}}, "c": {Data: D{1}}})
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
+		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
+		M{"a": {}, "b": {Data: D{1}}})
+	s.TestOKPrepare(t, "overwrite_a", `{"a": {"data":[9,9]}}`,
+		func() M { return M{"a": {Data: D{0, 1, 2, 3, 4, 5}}, "b": {Data: D{1}}} },
+		M{"a": {Data: D{9, 9}}, "b": {Data: D{1}}})
+
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "non_array_element", `{"x":42}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 5})
+}
+
 func TestDecodeJSONUnmarshaler(t *testing.T) {
 	s := newTestSetup[jsonUnmarshalerImpl](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "integer", `123`, jsonUnmarshalerImpl{Value: `123`})

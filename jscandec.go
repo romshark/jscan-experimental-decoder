@@ -68,6 +68,9 @@ const (
 	// ExpectTypeMap is any map type
 	ExpectTypeMap
 
+	// ExpectTypeMapStringString is `map[string]string`
+	ExpectTypeMapStringString
+
 	// ExpectTypeArray is any array type except zero-length array
 	ExpectTypeArray
 
@@ -225,6 +228,8 @@ func (t ExpectType) String() string {
 		return "any"
 	case ExpectTypeMap:
 		return "map"
+	case ExpectTypeMapStringString:
+		return "map[string]string"
 	case ExpectTypeArray:
 		return "array"
 	case ExpectTypeArrayLen0:
@@ -373,11 +378,8 @@ type stackFrame[S []byte | string] struct {
 	// LastMapKey is relevant to map frames only.
 	LastMapKey any
 
-	// MapValue is relevant to map frames only.
-	// MapValue is set at runtime and must be reset on every call to Decode
-	// to avoid keeping an unsafe.Pointer to the allocated map and allow the GC
-	// to clean it up if necessary.
-	MapValue reflect.Value
+	// MapType and MapValueType are relevant to map frames only.
+	MapType, MapValueType *typ
 
 	// Size defines the number of bytes the data would occupy in memory.
 	// Size caches reflect.Type.Size() for faster access.
@@ -409,6 +411,10 @@ type stackFrame[S []byte | string] struct {
 	// Same as Size, Type kind could be taken from reflect.Type but it's
 	// slower than storing it here.
 	Type ExpectType
+
+	// MapCanUseAssignFaststr is only relevant to map frames and indicates whether
+	// mapassign_faststr can be used instead of mapassign.
+	MapCanUseAssignFaststr bool
 }
 
 // noParentFrame uses math.MaxUint32 because the length of the decoder stack
@@ -733,13 +739,24 @@ func appendTypeToStack[S []byte | string](
 
 	case reflect.Map:
 		parentIndex := uint32(len(stack))
+
+		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
+			return append(stack, stackFrame[S]{
+				Type:             ExpectTypeMapStringString,
+				Size:             t.Size(),
+				ParentFrameIndex: noParentFrame,
+				RType:            t,
+			}), nil
+		}
+
 		stack = append(stack, stackFrame[S]{
-			// The map will be handled via reflect.Value
-			// hence the size is not t.Size().
-			Size:             t.Size(),
-			Type:             ExpectTypeMap,
-			ParentFrameIndex: noParentFrame,
-			RType:            t,
+			Type:                   ExpectTypeMap,
+			Size:                   t.Size(),
+			MapType:                getTyp(t),
+			MapValueType:           getTyp(t.Elem()),
+			MapCanUseAssignFaststr: canUseAssignFaststr(t),
+			ParentFrameIndex:       noParentFrame,
+			RType:                  t,
 		})
 		{
 			newAtIndex := len(stack)
@@ -1038,7 +1055,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	defer func() {
 		for i := range d.stackExp {
 			d.stackExp[i].Dest = nil
-			d.stackExp[i].MapValue = reflect.Value{}
 		}
 	}()
 
@@ -1720,6 +1736,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Nothing
 				case ExpectTypeAny:
 					*(*any)(p) = nil
+				case ExpectTypeMapStringString:
+					*(*map[string]string)(p) = nil
 				case ExpectTypeMap:
 					*(*map[any]any)(p) = nil
 				case ExpectTypeSlice:
@@ -2627,21 +2645,52 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if *(*map[any]any)(p) != nil {
-						d.stackExp[si].MapValue = reflect.NewAt(
-							d.stackExp[si].RType, p,
-						).Elem()
-					} else {
-						d.stackExp[si].MapValue = reflect.MakeMapWithSize(
-							d.stackExp[si].RType, tokens[ti].Elements,
+					if *(*unsafe.Pointer)(p) == nil {
+						*(*unsafe.Pointer)(p) = makemap(
+							d.stackExp[si].MapType, tokens[ti].Elements,
 						)
-						*(*unsafe.Pointer)(p) = d.stackExp[si].MapValue.UnsafePointer()
 					}
 					if tokens[ti].Elements == 0 {
 						ti += 2
 						goto ON_VAL_END
 					}
 					ti++
+
+				case ExpectTypeMapStringString:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					if tokens[ti].Elements == 0 {
+						ti += 2
+						*(*map[string]string)(p) = make(map[string]string, 0)
+						goto ON_VAL_END
+					}
+					m := make(map[string]string, tokens[ti].Elements)
+					tiEnd := tokens[ti].End
+
+					for ti++; ti < tiEnd; ti += 2 {
+						tokVal := tokens[ti+1]
+						if tokVal.Type != jscan.TokenTypeString {
+							if tokVal.Type == jscan.TokenTypeNull {
+								key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+								keyUnescaped := unescape.Valid[S, string](key)
+								m[keyUnescaped] = ""
+								continue
+							}
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokVal.Index,
+							}
+							return true
+						}
+						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+						keyUnescaped := unescape.Valid[S, string](key)
+						value := s[tokVal.Index+1 : tokVal.End-1]
+						m[keyUnescaped] = unescape.Valid[S, string](value)
+					}
+					ti++
+					*(*map[string]string)(p) = m
+					goto ON_VAL_END
 
 				case ExpectTypeStruct:
 					p := unsafe.Pointer(
@@ -2982,42 +3031,67 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 				case ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].Size
+
 				case ExpectTypeMap:
-					var valKey reflect.Value
+					var valKeyStr string
+					var pKey unsafe.Pointer
 					switch d.stackExp[siParent+1].Type {
 					case ExpectTypeStr:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(string))
+						k := d.stackExp[siParent].LastMapKey.(string)
+						pKey, valKeyStr = unsafe.Pointer(&k), k
 					case ExpectTypeTextUnmarshaler:
-						valKey = d.stackExp[siParent].LastMapKey.(reflect.Value).Elem()
+						k := d.stackExp[siParent].LastMapKey.(reflect.Value)
+						pKey = k.UnsafePointer()
 					case ExpectTypeInt:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int))
+						k := d.stackExp[siParent].LastMapKey.(int)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeInt8:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int8))
+						k := d.stackExp[siParent].LastMapKey.(int8)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeInt16:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int16))
+						k := d.stackExp[siParent].LastMapKey.(int16)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeInt32:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int32))
+						k := d.stackExp[siParent].LastMapKey.(int32)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeInt64:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(int64))
+						k := d.stackExp[siParent].LastMapKey.(int64)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeUint:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint))
+						k := d.stackExp[siParent].LastMapKey.(uint)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeUint8:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint8))
+						k := d.stackExp[siParent].LastMapKey.(uint8)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeUint16:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint16))
+						k := d.stackExp[siParent].LastMapKey.(uint16)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeUint32:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint32))
+						k := d.stackExp[siParent].LastMapKey.(uint32)
+						pKey = unsafe.Pointer(&k)
 					case ExpectTypeUint64:
-						valKey = reflect.ValueOf(d.stackExp[siParent].LastMapKey.(uint64))
+						k := d.stackExp[siParent].LastMapKey.(uint64)
+						pKey = unsafe.Pointer(&k)
 					}
-					// Add key-value pair to the map
-					d.stackExp[siParent].MapValue.SetMapIndex(
-						valKey,
-						reflect.NewAt(
-							d.stackExp[siParent].RType.Elem(), d.stackExp[si].Dest,
-						).Elem(),
+					pMap := unsafe.Pointer(
+						uintptr(d.stackExp[siParent].Dest) + d.stackExp[siParent].Offset,
 					)
+					pVal := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					typMap := d.stackExp[siParent].MapType
+					typVal := d.stackExp[siParent].MapValueType
+					// Add key-value pair to the map using faster assign if possible.
+					if d.stackExp[siParent].MapCanUseAssignFaststr {
+						mapV := mapassign_faststr(
+							typMap, *(*unsafe.Pointer)(pMap), valKeyStr,
+						)
+						typedmemmove(typVal, mapV, noescape(pVal))
+					} else {
+						mapassign(typMap, *(*unsafe.Pointer)(pMap), pKey, noescape(pVal))
+					}
 					fallthrough
+
 				case ExpectTypeStruct:
 					si = siParent
 					if si == noParentFrame {
@@ -3202,3 +3276,37 @@ func decodeAny[S ~[]byte | ~string](
 // emptyStructAddr the address to an empty slice remains the same
 // throughout the life of the process.
 var emptyStructAddr = unsafe.Pointer(&struct{}{})
+
+//go:linkname noescape reflect.noescape
+func noescape(p unsafe.Pointer) unsafe.Pointer
+
+//go:linkname typedmemmove reflect.typedmemmove
+func typedmemmove(t *typ, dst, src unsafe.Pointer)
+
+//go:linkname makemap reflect.makemap
+func makemap(*typ, int) unsafe.Pointer
+
+//nolint:golint
+//go:linkname mapassign_faststr runtime.mapassign_faststr
+//go:noescape
+func mapassign_faststr(t *typ, m unsafe.Pointer, s string) unsafe.Pointer
+
+//go:linkname mapassign reflect.mapassign
+//go:noescape
+func mapassign(t *typ, m unsafe.Pointer, k, v unsafe.Pointer)
+
+// typ represents reflect.rtype for noescape trick
+type typ struct{}
+
+type emptyInterface struct {
+	_   *typ
+	ptr unsafe.Pointer
+}
+
+func getTyp(t reflect.Type) *typ {
+	return (*typ)(((*emptyInterface)(unsafe.Pointer(&t))).ptr)
+}
+
+func canUseAssignFaststr(mapType reflect.Type) bool {
+	return mapType.Elem().Size() <= 128 && mapType.Key().Kind() == reflect.String
+}
