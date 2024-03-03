@@ -2669,8 +2669,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tiEnd := tokens[ti].End
 
 					for ti++; ti < tiEnd; ti += 2 {
-						if tokens[ti+1].Type != jscan.TokenTypeString {
-							if tokens[ti+1].Type == jscan.TokenTypeNull {
+						tokVal := tokens[ti+1]
+						if tokVal.Type != jscan.TokenTypeString {
+							if tokVal.Type == jscan.TokenTypeNull {
 								key := s[tokens[ti].Index+1 : tokens[ti].End-1]
 								keyUnescaped := unescape.Valid[S, string](key)
 								m[keyUnescaped] = ""
@@ -2678,13 +2679,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							err = ErrorDecode{
 								Err:   ErrUnexpectedValue,
-								Index: tokens[ti+1].Index,
+								Index: tokVal.Index,
 							}
 							return true
 						}
 						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
 						keyUnescaped := unescape.Valid[S, string](key)
-						value := s[tokens[ti+1].Index+1 : tokens[ti+1].End-1]
+						value := s[tokVal.Index+1 : tokVal.End-1]
 						m[keyUnescaped] = unescape.Valid[S, string](value)
 					}
 					ti++
