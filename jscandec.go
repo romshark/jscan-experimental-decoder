@@ -68,6 +68,9 @@ const (
 	// ExpectTypeMap is any map type
 	ExpectTypeMap
 
+	// ExpectTypeMapStringString is `map[string]string`
+	ExpectTypeMapStringString
+
 	// ExpectTypeArray is any array type except zero-length array
 	ExpectTypeArray
 
@@ -225,6 +228,8 @@ func (t ExpectType) String() string {
 		return "any"
 	case ExpectTypeMap:
 		return "map"
+	case ExpectTypeMapStringString:
+		return "map[string]string"
 	case ExpectTypeArray:
 		return "array"
 	case ExpectTypeArrayLen0:
@@ -734,11 +739,27 @@ func appendTypeToStack[S []byte | string](
 
 	case reflect.Map:
 		parentIndex := uint32(len(stack))
+
+		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
+			return append(stack, stackFrame[S]{
+				Type:             ExpectTypeMapStringString,
+				Size:             t.Size(),
+				ParentFrameIndex: noParentFrame,
+				RType:            t,
+			}, stackFrame[S]{
+				Type:             ExpectTypeStr,
+				Size:             t.Key().Size(),
+				ParentFrameIndex: parentIndex,
+			}, stackFrame[S]{
+				Type:             ExpectTypeStr,
+				Size:             t.Key().Size(),
+				ParentFrameIndex: parentIndex,
+			}), nil
+		}
+
 		stack = append(stack, stackFrame[S]{
-			// The map will be handled via reflect.Value
-			// hence the size is not t.Size().
-			Size:                   t.Size(),
 			Type:                   ExpectTypeMap,
+			Size:                   t.Size(),
 			MapType:                getTyp(t),
 			MapValueType:           getTyp(t.Elem()),
 			MapCanUseAssignFaststr: canUseAssignFaststr(t),
@@ -1723,6 +1744,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Nothing
 				case ExpectTypeAny:
 					*(*any)(p) = nil
+				case ExpectTypeMapStringString:
+					*(*map[string]string)(p) = nil
 				case ExpectTypeMap:
 					*(*map[any]any)(p) = nil
 				case ExpectTypeSlice:
@@ -2641,6 +2664,21 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					ti++
 
+				case ExpectTypeMapStringString:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					if *(*map[string]string)(p) == nil {
+						*(*map[string]string)(p) = make(
+							map[string]string, tokens[ti].Elements,
+						)
+					}
+					if tokens[ti].Elements == 0 {
+						ti += 2
+						goto ON_VAL_END
+					}
+					ti++
+
 				case ExpectTypeStruct:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
@@ -2933,6 +2971,16 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
 					}
 
+				case ExpectTypeMapStringString:
+					// Record the key for insertion (once the value is read)
+					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					d.stackExp[si].LastMapKey = unescape.Valid[S, string](key)
+
+					// The value frame is guaranteed to be at an offset of 2
+					// relative to the map frame index.
+					si += 2
+					d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -2980,6 +3028,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 				case ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].Size
+
 				case ExpectTypeMap:
 					var valKeyStr string
 					var pKey unsafe.Pointer
@@ -3038,7 +3087,33 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					} else {
 						mapassign(typMap, *(*unsafe.Pointer)(pMap), pKey, noescape(pVal))
 					}
-					fallthrough
+					si = siParent
+					if si == noParentFrame {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+
+				case ExpectTypeMapStringString:
+					pMap := unsafe.Pointer(
+						uintptr(d.stackExp[siParent].Dest) + d.stackExp[siParent].Offset,
+					)
+					pVal := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					key := d.stackExp[siParent].LastMapKey.(string)
+					(*(*map[string]string)(pMap))[key] = *(*string)(pVal)
+					si = siParent
+					if si == noParentFrame {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+
 				case ExpectTypeStruct:
 					si = siParent
 					if si == noParentFrame {
