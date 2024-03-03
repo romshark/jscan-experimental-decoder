@@ -26,6 +26,10 @@ type MapStringString struct {
 	Data map[string]string `json:"data"`
 }
 
+type MapIntMapStringStruct3 struct {
+	Data map[int]map[string]Struct3 `json:"data"`
+}
+
 type Struct3 struct {
 	Name   string   `json:"name"`
 	Number int      `json:"number"`
