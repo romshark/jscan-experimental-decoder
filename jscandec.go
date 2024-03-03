@@ -746,14 +746,6 @@ func appendTypeToStack[S []byte | string](
 				Size:             t.Size(),
 				ParentFrameIndex: noParentFrame,
 				RType:            t,
-			}, stackFrame[S]{
-				Type:             ExpectTypeStr,
-				Size:             t.Key().Size(),
-				ParentFrameIndex: parentIndex,
-			}, stackFrame[S]{
-				Type:             ExpectTypeStr,
-				Size:             t.Key().Size(),
-				ParentFrameIndex: parentIndex,
 			}), nil
 		}
 
@@ -2668,16 +2660,36 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					if *(*map[string]string)(p) == nil {
-						*(*map[string]string)(p) = make(
-							map[string]string, tokens[ti].Elements,
-						)
-					}
 					if tokens[ti].Elements == 0 {
 						ti += 2
+						*(*map[string]string)(p) = make(map[string]string, 0)
 						goto ON_VAL_END
 					}
+					m := make(map[string]string, tokens[ti].Elements)
+					tiEnd := tokens[ti].End
+
+					for ti++; ti < tiEnd; ti += 2 {
+						if tokens[ti+1].Type != jscan.TokenTypeString {
+							if tokens[ti+1].Type == jscan.TokenTypeNull {
+								key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+								keyUnescaped := unescape.Valid[S, string](key)
+								m[keyUnescaped] = ""
+								continue
+							}
+							err = ErrorDecode{
+								Err:   ErrUnexpectedValue,
+								Index: tokens[ti+1].Index,
+							}
+							return true
+						}
+						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+						keyUnescaped := unescape.Valid[S, string](key)
+						value := s[tokens[ti+1].Index+1 : tokens[ti+1].End-1]
+						m[keyUnescaped] = unescape.Valid[S, string](value)
+					}
 					ti++
+					*(*map[string]string)(p) = m
+					goto ON_VAL_END
 
 				case ExpectTypeStruct:
 					p := unsafe.Pointer(
@@ -2971,16 +2983,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
 					}
 
-				case ExpectTypeMapStringString:
-					// Record the key for insertion (once the value is read)
-					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
-					d.stackExp[si].LastMapKey = unescape.Valid[S, string](key)
-
-					// The value frame is guaranteed to be at an offset of 2
-					// relative to the map frame index.
-					si += 2
-					d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
-
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -3087,32 +3089,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					} else {
 						mapassign(typMap, *(*unsafe.Pointer)(pMap), pKey, noescape(pVal))
 					}
-					si = siParent
-					if si == noParentFrame {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
-						return true
-					}
-
-				case ExpectTypeMapStringString:
-					pMap := unsafe.Pointer(
-						uintptr(d.stackExp[siParent].Dest) + d.stackExp[siParent].Offset,
-					)
-					pVal := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
-					key := d.stackExp[siParent].LastMapKey.(string)
-					(*(*map[string]string)(pMap))[key] = *(*string)(pVal)
-					si = siParent
-					if si == noParentFrame {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
-						return true
-					}
+					fallthrough
 
 				case ExpectTypeStruct:
 					si = siParent

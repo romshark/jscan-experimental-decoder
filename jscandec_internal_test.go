@@ -429,16 +429,6 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size:             reflect.TypeOf(map[string]string{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
-				{
-					Type:             ExpectTypeStr,
-					Size:             reflect.TypeOf(string("")).Size(),
-					ParentFrameIndex: 0,
-				},
-				{
-					Type:             ExpectTypeStr,
-					Size:             reflect.TypeOf(string("")).Size(),
-					ParentFrameIndex: 0,
-				},
 			},
 		},
 		{
