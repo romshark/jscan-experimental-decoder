@@ -372,11 +372,8 @@ type stackFrame[S []byte | string] struct {
 	// For every other type Fields is always nil.
 	Fields []fieldStackFrame
 
-	// RType is relevant to map and JSONUnmarshaler frames only.
+	// RType is relevant to JSONUnmarshaler frames only.
 	RType reflect.Type
-
-	// LastMapKey is relevant to map frames only.
-	LastMapKey any
 
 	// MapType and MapValueType are relevant to map frames only.
 	MapType, MapValueType *typ
@@ -634,6 +631,7 @@ func appendTypeToStack[S []byte | string](
 					Size:             t.Size(),
 					Type:             ExpectTypeSliceEmptyStruct,
 					ParentFrameIndex: noParentFrame,
+					RType:            t,
 				}), nil
 			}
 		case reflect.Bool:
@@ -791,6 +789,7 @@ func appendTypeToStack[S []byte | string](
 			Fields:           make([]fieldStackFrame, 0, numFields),
 			Size:             t.Size(),
 			Type:             ExpectTypeStruct,
+			RType:            t,
 			ParentFrameIndex: noParentFrame,
 		})
 
@@ -2647,6 +2646,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					if *(*unsafe.Pointer)(p) == nil {
+						// Map not yet initialized, initialize map.
 						*(*unsafe.Pointer)(p) = makemap(
 							d.stackExp[si].MapType, tokens[ti].Elements,
 						)
@@ -2697,6 +2697,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
+
 					if tokens[ti].Elements == 0 {
 						ti += 2
 						goto ON_VAL_END
@@ -2764,15 +2765,24 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 
 				case ExpectTypeMap:
-					// Record the key for insertion (once the value is read)
+					// Insert the key and assign the value frame destination pointer.
+
 					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+
+					typMap := d.stackExp[si].MapType
+					typVal := d.stackExp[si].MapValueType
+					pMap := *(*unsafe.Pointer)(unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					))
+
+					// pNewData will point to the new data cell in the map.
+					var pNewData unsafe.Pointer
 
 					// The key frame is guaranteed to be non-composite (single frame)
 					// and at an offset of 1 relative to the map frame index.
 					switch d.stackExp[si+1].Type {
 					case ExpectTypeTextUnmarshaler:
-						keyType := d.stackExp[si+1].RType
-						v := reflect.New(keyType)
+						v := reflect.New(d.stackExp[si+1].RType)
 						iface := v.Interface().(encoding.TextUnmarshaler)
 						keyUnescaped := unescape.Valid[S, []byte](key)
 						if errU := iface.UnmarshalText(keyUnescaped); errU != nil {
@@ -2782,10 +2792,16 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pKey := v.UnsafePointer()
+						pNewData = mapassign(typMap, pMap, noescape(pKey))
 
 					case ExpectTypeStr:
-						d.stackExp[si].LastMapKey = unescape.Valid[S, string](key)
+						keyStr := unescape.Valid[S, string](key)
+						if d.stackExp[si].MapCanUseAssignFaststr {
+							pNewData = mapassign_faststr(typMap, pMap, keyStr)
+						} else {
+							pNewData = mapassign(typMap, pMap, unsafe.Pointer(&keyStr))
+						}
 
 					case ExpectTypeInt:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2804,7 +2820,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeInt8:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2823,7 +2839,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeInt16:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2842,7 +2858,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeInt32:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2861,7 +2877,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeInt64:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2880,7 +2896,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeUint:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2899,7 +2915,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeUint8:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2918,7 +2934,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeUint16:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2937,7 +2953,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeUint32:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2956,7 +2972,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 
 					case ExpectTypeUint64:
 						_, rc := jsonnum.ReadNumber(key)
@@ -2975,14 +2991,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							}
 							return true
 						}
-						d.stackExp[si].LastMapKey = v
+						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 					}
 
-					// The value frame is guaranteed to be at an offset of 2
-					// relative to the map frame index.
+					// For non-recursive maps the value frame is guaranteed to
+					// be at an offset of 2 relative to the map frame index.
 					si += 2
-					if d.stackExp[si].Size > 0 {
-						d.stackExp[si].Dest = allocate(d.stackExp[si].Size)
+
+					// Point the value stack frame to the newly allocated map cell.
+					d.stackExp[si].Dest = pNewData
+
+					// Zero struct values
+					if d.stackExp[si].Type == ExpectTypeStruct {
+						typedmemclr(typVal, pNewData)
 					}
 
 				default:
@@ -2997,6 +3018,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			case jscan.TokenTypeObjectEnd:
 				ti++
 				goto ON_VAL_END
+
 			case jscan.TokenTypeArrayEnd:
 				if tokens[tokens[ti].End].Elements != 0 {
 					si--
@@ -3007,8 +3029,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			continue
 
 		ON_VAL_END:
-			if siParent := d.stackExp[si].ParentFrameIndex; siParent != noParentFrame {
-				switch d.stackExp[siParent].Type {
+			if siCon := d.stackExp[si].ParentFrameIndex; siCon != noParentFrame {
+				switch d.stackExp[siCon].Type {
 				case ExpectTypePtr:
 					si--
 				case ExpectTypeArray:
@@ -3033,68 +3055,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].Size
 
-				case ExpectTypeMap:
-					var valKeyStr string
-					var pKey unsafe.Pointer
-					switch d.stackExp[siParent+1].Type {
-					case ExpectTypeStr:
-						k := d.stackExp[siParent].LastMapKey.(string)
-						pKey, valKeyStr = unsafe.Pointer(&k), k
-					case ExpectTypeTextUnmarshaler:
-						k := d.stackExp[siParent].LastMapKey.(reflect.Value)
-						pKey = k.UnsafePointer()
-					case ExpectTypeInt:
-						k := d.stackExp[siParent].LastMapKey.(int)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeInt8:
-						k := d.stackExp[siParent].LastMapKey.(int8)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeInt16:
-						k := d.stackExp[siParent].LastMapKey.(int16)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeInt32:
-						k := d.stackExp[siParent].LastMapKey.(int32)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeInt64:
-						k := d.stackExp[siParent].LastMapKey.(int64)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeUint:
-						k := d.stackExp[siParent].LastMapKey.(uint)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeUint8:
-						k := d.stackExp[siParent].LastMapKey.(uint8)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeUint16:
-						k := d.stackExp[siParent].LastMapKey.(uint16)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeUint32:
-						k := d.stackExp[siParent].LastMapKey.(uint32)
-						pKey = unsafe.Pointer(&k)
-					case ExpectTypeUint64:
-						k := d.stackExp[siParent].LastMapKey.(uint64)
-						pKey = unsafe.Pointer(&k)
-					}
-					pMap := unsafe.Pointer(
-						uintptr(d.stackExp[siParent].Dest) + d.stackExp[siParent].Offset,
-					)
-					pVal := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
-					typMap := d.stackExp[siParent].MapType
-					typVal := d.stackExp[siParent].MapValueType
-					// Add key-value pair to the map using faster assign if possible.
-					if d.stackExp[siParent].MapCanUseAssignFaststr {
-						mapV := mapassign_faststr(
-							typMap, *(*unsafe.Pointer)(pMap), valKeyStr,
-						)
-						typedmemmove(typVal, mapV, noescape(pVal))
-					} else {
-						mapassign(typMap, *(*unsafe.Pointer)(pMap), pKey, noescape(pVal))
-					}
-					fallthrough
-
-				case ExpectTypeStruct:
-					si = siParent
+				case ExpectTypeMap, ExpectTypeStruct:
+					si = siCon
 					if si == noParentFrame {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -3281,6 +3243,10 @@ var emptyStructAddr = unsafe.Pointer(&struct{}{})
 //go:linkname noescape reflect.noescape
 func noescape(p unsafe.Pointer) unsafe.Pointer
 
+//go:linkname typedmemclr runtime.typedmemclr
+//go:noescape
+func typedmemclr(typ *typ, dst unsafe.Pointer)
+
 //go:linkname typedmemmove reflect.typedmemmove
 func typedmemmove(t *typ, dst, src unsafe.Pointer)
 
@@ -3292,9 +3258,9 @@ func makemap(*typ, int) unsafe.Pointer
 //go:noescape
 func mapassign_faststr(t *typ, m unsafe.Pointer, s string) unsafe.Pointer
 
-//go:linkname mapassign reflect.mapassign
+//go:linkname mapassign runtime.mapassign
 //go:noescape
-func mapassign(t *typ, m unsafe.Pointer, k, v unsafe.Pointer)
+func mapassign(t *typ, m unsafe.Pointer, k unsafe.Pointer) unsafe.Pointer
 
 // typ represents reflect.rtype for noescape trick
 type typ struct{}
