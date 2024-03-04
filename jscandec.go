@@ -3306,7 +3306,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Reset to parent context
 					// dumpStack("BEFORE RESET")
 					topIndex := len(recurStack) - 1
-					resetTo := d.stackExp[si].RecursionStack[topIndex]
+					resetTo := d.stackExp[recursiveFrame].RecursionStack[topIndex]
 					d.stackExp[si].Dest = resetTo.Dest
 					d.stackExp[si].Offset = resetTo.Offset
 					fields := d.stackExp[si].Fields
@@ -3316,7 +3316,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					// Pop recursion stack
 					recurStack[topIndex].Dest = nil
-					d.stackExp[si].RecursionStack = recurStack[:topIndex]
+					d.stackExp[recursiveFrame].RecursionStack = recurStack[:topIndex]
 					// fmt.Println("EXITED RECURSIVE MAP", si)
 					// dumpStack("AFTER RESET")
 					continue
