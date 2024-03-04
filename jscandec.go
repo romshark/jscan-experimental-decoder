@@ -62,6 +62,9 @@ const (
 	// ExpectTypePtr is any pointer type
 	ExpectTypePtr
 
+	// ExpectTypePtrRecur is any recursive pointer type (used for recursive struct fields)
+	ExpectTypePtrRecur
+
 	// ExpectTypeAny is type `any`
 	ExpectTypeAny
 
@@ -71,6 +74,9 @@ const (
 	// ExpectTypeMapStringString is `map[string]string`
 	ExpectTypeMapStringString
 
+	// ExpectTypeMapRecur is any recursive map type (used for recursive struct fields)
+	ExpectTypeMapRecur
+
 	// ExpectTypeArray is any array type except zero-length array
 	ExpectTypeArray
 
@@ -79,6 +85,9 @@ const (
 
 	// ExpectTypeSlice is any slice type
 	ExpectTypeSlice
+
+	// ExpectTypeSliceRecur is a recursive slice type (used for recursive struct fields)
+	ExpectTypeSliceRecur
 
 	// ExpectTypeSliceEmptyStruct is type `[]struct{}`
 	ExpectTypeSliceEmptyStruct
@@ -127,6 +136,9 @@ const (
 
 	// ExpectTypeStruct is any struct type except `struct{}`
 	ExpectTypeStruct
+
+	// ExpectTypeStruct is any recursive struct type
+	ExpectTypeStructRecur
 
 	// ExpectTypeEmptyStruct is type `struct{}`
 	ExpectTypeEmptyStruct
@@ -224,18 +236,24 @@ func (t ExpectType) String() string {
 		return "interface{UnmarshalText([]byte)error}"
 	case ExpectTypePtr:
 		return "*"
+	case ExpectTypePtrRecur:
+		return "*⟲"
 	case ExpectTypeAny:
 		return "any"
 	case ExpectTypeMap:
 		return "map"
 	case ExpectTypeMapStringString:
 		return "map[string]string"
+	case ExpectTypeMapRecur:
+		return "map⟲"
 	case ExpectTypeArray:
 		return "array"
 	case ExpectTypeArrayLen0:
 		return "[0]array"
 	case ExpectTypeSlice:
 		return "slice"
+	case ExpectTypeSliceRecur:
+		return "slice⟲"
 	case ExpectTypeSliceEmptyStruct:
 		return "[]struct{}"
 	case ExpectTypeSliceBool:
@@ -268,6 +286,8 @@ func (t ExpectType) String() string {
 		return "[]float64"
 	case ExpectTypeStruct:
 		return "struct"
+	case ExpectTypeStructRecur:
+		return "struct⟲"
 	case ExpectTypeEmptyStruct:
 		return "struct{}"
 	case ExpectTypeBool:
@@ -367,6 +387,17 @@ type fieldStackFrame struct {
 	Name string
 }
 
+type recursionStackFrame struct {
+	// Dest stores the destination pointer for the recursive frame to be reset to.
+	Dest unsafe.Pointer
+
+	// Offset stores the offset for the recursive frame to be reset to.
+	Offset uintptr
+
+	// ContainerFrame stores the index of the recursive container frame.
+	ContainerFrame uint32
+}
+
 type stackFrame[S []byte | string] struct {
 	// Fields is only relevant to structs.
 	// For every other type Fields is always nil.
@@ -382,9 +413,14 @@ type stackFrame[S []byte | string] struct {
 	// Size caches reflect.Type.Size() for faster access.
 	Size uintptr
 
-	// Cap is relevant to array item frames only and defines the
-	// capacity of the parent array.
-	Cap int
+	// RecursionStack is only relevant to ExpectTypeStructRecur and
+	// keeps track of its recursion through pointers/maps/slices.
+	RecursionStack []recursionStackFrame
+
+	// CapOrRecurFrame defines the capacity of the parent array for array item frames.
+	// For ExpectTypePtrRecur, ExpectTypeMapRecur and ExpectTypeSliceRecur this
+	// is the index of the recursive ExpectTypeStructRecur frame.
+	CapOrRecurFrame int
 
 	// Len is relevant to array frames only and defines their current length.
 	Len int // Overwritten at runtime
@@ -621,18 +657,33 @@ func appendTypeToStack[S []byte | string](
 
 		// Link array element to the array frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
-		stack[newAtIndex].Cap = t.Len()
+		stack[newAtIndex].CapOrRecurFrame = t.Len()
 
 	case reflect.Slice:
-		switch t.Elem().Kind() {
+		elem := t.Elem()
+		switch elem.Kind() {
 		case reflect.Struct:
-			if t.Elem().Size() < 1 {
+			if elem.Size() < 1 {
 				return append(stack, stackFrame[S]{
 					Size:             t.Size(),
 					Type:             ExpectTypeSliceEmptyStruct,
 					ParentFrameIndex: noParentFrame,
-					RType:            t,
 				}), nil
+			}
+			// Check for recursion
+			for i := range stack {
+				if stack[i].RType == elem {
+					// Recursion of type stack[i] detected.
+					// Link recursive frame to the recursion frame.
+					stack[i].Type = ExpectTypeStructRecur
+					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
+					return append(stack, stackFrame[S]{
+						Type:             ExpectTypeSliceRecur,
+						Size:             t.Size(),
+						ParentFrameIndex: noParentFrame,
+						CapOrRecurFrame:  i,
+					}), nil
+				}
 			}
 		case reflect.Bool:
 			return append(stack, stackFrame[S]{
@@ -737,6 +788,38 @@ func appendTypeToStack[S []byte | string](
 
 	case reflect.Map:
 		parentIndex := uint32(len(stack))
+		elem := t.Elem()
+		if elem.Kind() == reflect.Struct && elem.Size() > 0 {
+			// Check for recursion
+			for i := range stack {
+				if stack[i].RType == elem {
+					// Recursion of type stack[i] detected.
+					// Link recursive frame to the recursion frame.
+					stack[i].Type = ExpectTypeStructRecur
+					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
+					stack = append(stack, stackFrame[S]{
+						Type:                   ExpectTypeMapRecur,
+						Size:                   t.Size(),
+						MapType:                getTyp(t),
+						MapValueType:           getTyp(t.Elem()),
+						MapCanUseAssignFaststr: canUseAssignFaststr(t),
+						ParentFrameIndex:       noParentFrame,
+						CapOrRecurFrame:        i,
+					})
+					{
+						newAtIndex := len(stack)
+						var err error
+						stack, err = appendTypeToStack(stack, t.Key(), options)
+						if err != nil {
+							return nil, err
+						}
+						// Link map key to the map frame.
+						stack[newAtIndex].ParentFrameIndex = parentIndex
+					}
+					return stack, nil
+				}
+			}
+		}
 
 		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
 			return append(stack, stackFrame[S]{
@@ -768,7 +851,7 @@ func appendTypeToStack[S []byte | string](
 		{
 			newAtIndex := len(stack)
 			var err error
-			if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
+			if stack, err = appendTypeToStack(stack, elem, options); err != nil {
 				return nil, err
 			}
 			// Link map value to the map frame.
@@ -959,6 +1042,26 @@ func appendTypeToStack[S []byte | string](
 		})
 	case reflect.Pointer:
 		parentIndex := uint32(len(stack))
+
+		elem := t.Elem()
+		if elem.Kind() == reflect.Struct && elem.Size() > 0 {
+			// Check for recursion
+			for i := range stack {
+				if stack[i].RType == elem {
+					// Recursion of type stack[i] detected.
+					// Link recursive frame to the recursion frame.
+					stack[i].Type = ExpectTypeStructRecur
+					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
+					return append(stack, stackFrame[S]{
+						Type:             ExpectTypePtrRecur,
+						Size:             t.Size(),
+						ParentFrameIndex: noParentFrame,
+						CapOrRecurFrame:  i,
+					}), nil
+				}
+			}
+		}
+
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypePtr,
 			Size:             t.Size(),
@@ -966,7 +1069,8 @@ func appendTypeToStack[S []byte | string](
 		})
 		newAtIndex := len(stack)
 		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
+
+		if stack, err = appendTypeToStack(stack, elem, options); err != nil {
 			return nil, err
 		}
 		stack[newAtIndex].ParentFrameIndex = parentIndex
@@ -1061,8 +1165,31 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 		return ErrorDecode{Err: ErrNilDest}
 	}
 
+	// dumpStack := func(title string) {
+	// 	fmt.Printf("STACK « %s » \n", title)
+	// 	for i, x := range d.stackExp {
+	// 		parent := "-"
+	// 		if x.ParentFrameIndex != noParentFrame {
+	// 			parent = fmt.Sprintf("%d", x.ParentFrameIndex)
+	// 		}
+	// 		rType := ""
+	// 		if x.RType != nil {
+	// 			rType = x.RType.String()
+	// 		}
+	// 		dest := "0x00000000000"
+	// 		if x.Dest != nil {
+	// 			dest = fmt.Sprintf("%p", x.Dest)
+	// 		}
+	// 		fmt.Printf(" %d: %s\tDEST %s\tPAR %s\tOFFSET %d\tSIZE %d\t%s\n",
+	// 			i, x.Type, dest, parent, x.Offset, x.Size, rType)
+	// 	}
+	// 	fmt.Println("------------------------")
+	// }
+	// dumpStack("init")
+
 	si := uint32(0)
 	d.stackExp[0].Dest = unsafe.Pointer(t)
+	// fmt.Printf("VROOT %p\n", d.stackExp[0].Dest)
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		// ti stands for the token index and points at the current token
@@ -1081,6 +1208,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*unsafe.Pointer)(p) = dp
 				}
 				continue
+			case ExpectTypePtrRecur:
+				panic("TODO")
 			case ExpectTypeJSONUnmarshaler:
 				goto ON_JSON_UNMARSHALER
 			}
@@ -1452,6 +1581,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*string)(p) = unescape.Valid[S, string](
 						s[tokens[ti].Index+1 : tokens[ti].End-1],
 					)
+					// fmt.Printf("%d\tSTR %q\tAT %p OFFSET %d\n",
+					// 	ti, *(*string)(p), d.stackExp[si].Dest, d.stackExp[si].Offset)
 				case ExpectTypeBoolString:
 					switch string(s[tokens[ti].Index+1 : tokens[ti].End-1]) {
 					case "true":
@@ -1742,8 +1873,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*map[any]any)(p) = nil
 				case ExpectTypeSlice:
 					// Skip
-				case ExpectTypeStruct:
-					// Nothing, the struct is already zeroed
+				case ExpectTypeStruct, ExpectTypeStructRecur:
+					// Skip
 				case ExpectTypeBool:
 					*(*bool)(p) = zeroBool
 				case ExpectTypeStr:
@@ -1884,6 +2015,75 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					ti++
 					si++
+					d.stackExp[si].Dest = dp
+					d.stackExp[si].Offset = 0
+
+				case ExpectTypeSliceRecur:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					elementSize := d.stackExp[recursiveFrame].Size
+					elems := uintptr(tokens[ti].Elements)
+
+					if elems == 0 {
+						// Allocate empty slice
+						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
+						if elementSize > 0 {
+							emptySlice.Data = allocate(elementSize)
+						}
+						*(*sliceHeader)(p) = emptySlice
+						ti += 2
+						if len(d.stackExp[recursiveFrame].RecursionStack) < 1 {
+							goto ON_VAL_END
+						}
+						si = uint32(recursiveFrame)
+						continue
+					}
+
+					var dp unsafe.Pointer
+					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
+						sh := sliceHeader{Data: emptyStructAddr, Len: elems, Cap: elems}
+						allocated := make([]byte, elems*elementSize)
+						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
+							// Must copy existing data because it's not guarenteed
+							// that the existing data will be fully overwritten.
+							copy(allocated, *(*[]byte)(unsafe.Pointer(&sliceHeader{
+								Data: h.Data,
+								Len:  h.Len * elementSize,
+								Cap:  h.Cap * elementSize,
+							})))
+						}
+						sh.Data = unsafe.Pointer(&allocated[0])
+						*(*sliceHeader)(p) = sh
+						dp = sh.Data
+						// fmt.Printf("%d\tNEW SLICE\tAT %p %d/%d\n",
+						// 	ti, sh.Data, sh.Len, sh.Cap)
+					} else {
+						(*sliceHeader)(p).Len = uintptr(tokens[ti].Elements)
+						dp = (*sliceHeader)(p).Data
+					}
+					ti++
+
+					// Push recursion stack
+					d.stackExp[recursiveFrame].RecursionStack = append(
+						d.stackExp[recursiveFrame].RecursionStack, recursionStackFrame{
+							Dest:           d.stackExp[recursiveFrame].Dest,
+							Offset:         d.stackExp[recursiveFrame].Offset,
+							ContainerFrame: si,
+						},
+					)
+					// fmt.Printf("%d\tPUSH SLICE\tON %p OFFSET %d SI %d\n",
+					// 	ti,
+					// 	d.stackExp[si].Dest,
+					// 	d.stackExp[si].Offset,
+					// 	si)
+					// fmt.Printf("%d\tPUSHED\t\t%v\n",
+					// 	ti,
+					// 	d.stackExp[recursiveFrame].RecursionStack)
+
+					si = uint32(recursiveFrame)
 					d.stackExp[si].Dest = dp
 					d.stackExp[si].Offset = 0
 
@@ -2641,6 +2841,37 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END
 
+				case ExpectTypeMapRecur:
+					// Push recursion stack
+					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					// fmt.Printf("PUSH STACK %p OFFSET %d SI %d\n",
+					// 	d.stackExp[recursiveFrame].Dest,
+					// 	d.stackExp[recursiveFrame].Offset,
+					// 	si)
+					d.stackExp[recursiveFrame].RecursionStack = append(
+						d.stackExp[recursiveFrame].RecursionStack, recursionStackFrame{
+							Dest:           d.stackExp[recursiveFrame].Dest,
+							Offset:         d.stackExp[recursiveFrame].Offset,
+							ContainerFrame: si,
+						},
+					)
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					if *(*unsafe.Pointer)(p) == nil {
+						// Map not yet initialized, initialize map.
+						*(*unsafe.Pointer)(p) = makemap(
+							d.stackExp[si].MapType, tokens[ti].Elements,
+						)
+						// fmt.Printf("INIT MAP %p TO %p OFFSET %d\n",
+						// 	*(*unsafe.Pointer)(p), d.stackExp[si].Dest, d.stackExp[si].Offset)
+					}
+					if tokens[ti].Elements == 0 {
+						ti += 2
+						goto ON_VAL_END
+					}
+					ti++
+
 				case ExpectTypeMap:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
@@ -2709,6 +2940,21 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					ti++
 
+				case ExpectTypeStructRecur:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+					if tokens[ti].Elements == 0 {
+						ti += 2
+						goto ON_RECUR_OBJ_END
+					}
+					// Point all fields to the struct, the offsets are already
+					// set statically during decoder init time.
+					for i := range d.stackExp[si].Fields {
+						d.stackExp[d.stackExp[si].Fields[i].FrameIndex].Dest = p
+					}
+					ti++
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -2719,7 +2965,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 			case jscan.TokenTypeKey:
 				switch d.stackExp[si].Type {
-				case ExpectTypeStruct:
+				case ExpectTypeStruct, ExpectTypeStructRecur:
 				SCAN_KEYVALS:
 					for {
 						key := unescape.Valid[S, string](
@@ -2764,16 +3010,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						break
 					}
 
-				case ExpectTypeMap:
+				case ExpectTypeMap, ExpectTypeMapRecur:
 					// Insert the key and assign the value frame destination pointer.
 
 					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+
+					// fmt.Printf("KEY %q SI %d ON %p\n", key, si, d.stackExp[si].Dest)
 
 					typMap := d.stackExp[si].MapType
 					typVal := d.stackExp[si].MapValueType
 					pMap := *(*unsafe.Pointer)(unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					))
+					// fmt.Printf("SOURCE MAP %p FROM %p\n", pMap, d.stackExp[si].Dest)
 
 					// pNewData will point to the new data cell in the map.
 					var pNewData unsafe.Pointer
@@ -2798,9 +3047,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeStr:
 						keyStr := unescape.Valid[S, string](key)
 						if d.stackExp[si].MapCanUseAssignFaststr {
+							// fmt.Println("pMap:", pMap)
 							pNewData = mapassign_faststr(typMap, pMap, keyStr)
+							// fmt.Printf("ASSIGFAST %q IS NOW CELL %p\n", keyStr, pNewData)
 						} else {
 							pNewData = mapassign(typMap, pMap, unsafe.Pointer(&keyStr))
+							// fmt.Printf("ASSIG %q IS NOW CELL %p\n", keyStr, pNewData)
 						}
 
 					case ExpectTypeInt:
@@ -2994,11 +3246,27 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 					}
 
-					// For non-recursive maps the value frame is guaranteed to
-					// be at an offset of 2 relative to the map frame index.
-					si += 2
-
 					// Point the value stack frame to the newly allocated map cell.
+					// d.stackExp[si+1].Dest = pNewData
+
+					if d.stackExp[si].Type == ExpectTypeMapRecur {
+						recursiveFrame := d.stackExp[si].CapOrRecurFrame
+						// // Push recursion stack before moving back to the recursive frame.
+						// d.stackExp[recursiveFrame].RecursionStack = append(
+						// 	d.stackExp[recursiveFrame].RecursionStack,
+						// 	recursionStackFrame{
+						// 		Dest:           d.stackExp[recursiveFrame].Dest,
+						// 		Offset:         d.stackExp[recursiveFrame].Offset,
+						// 		ContainerFrame: si,
+						// 	},
+						// )
+						si = uint32(recursiveFrame)
+					} else {
+						// For non-recursive maps the value frame is guaranteed to
+						// be at an offset of 2 relative to the map frame index.
+						si += 2
+					}
+
 					d.stackExp[si].Dest = pNewData
 
 					// Zero struct values
@@ -3016,17 +3284,92 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				ti++
 
 			case jscan.TokenTypeObjectEnd:
+				// fmt.Printf("OBJ END TI %d SI %d\n", ti, si)
 				ti++
-				goto ON_VAL_END
+				switch d.stackExp[si].Type {
+				case ExpectTypeStruct:
+					goto ON_VAL_END
+				case ExpectTypeMapRecur:
+					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					// fmt.Printf("RECURSTACK_LEN %d SI %d REC SI %d\n",
+					// 	len(d.stackExp[recursiveFrame].RecursionStack), si, recursiveFrame)
+					recurStack := d.stackExp[recursiveFrame].RecursionStack
+					if len(recurStack) < 1 {
+						// In map of the root recursive struct
+						// si = uint32(d.stackExp[si].CapOrRecurFrame)
+						// fmt.Printf("%d\tIN ROOT MAP\n", ti)
+						goto ON_VAL_END
+					}
+
+					si = uint32(d.stackExp[si].ParentFrameIndex)
+
+					// Reset to parent context
+					// dumpStack("BEFORE RESET")
+					topIndex := len(recurStack) - 1
+					resetTo := d.stackExp[si].RecursionStack[topIndex]
+					d.stackExp[si].Dest = resetTo.Dest
+					d.stackExp[si].Offset = resetTo.Offset
+					fields := d.stackExp[si].Fields
+					for i := range fields {
+						d.stackExp[fields[i].FrameIndex].Dest = resetTo.Dest
+					}
+
+					// Pop recursion stack
+					recurStack[topIndex].Dest = nil
+					d.stackExp[si].RecursionStack = recurStack[:topIndex]
+					// fmt.Println("EXITED RECURSIVE MAP", si)
+					// dumpStack("AFTER RESET")
+					continue
+				}
+				goto ON_RECUR_OBJ_END
 
 			case jscan.TokenTypeArrayEnd:
-				if tokens[tokens[ti].End].Elements != 0 {
-					si--
-				}
 				ti++
+				if d.stackExp[si].Type == ExpectTypeStructRecur {
+					recurStack := d.stackExp[si].RecursionStack
+					if len(recurStack) < 1 {
+						// In slice of the root recursive struct
+						// si = uint32(d.stackExp[si].CapOrRecurFrame)
+						// fmt.Printf("%d\tIN ROOT\n", ti)
+						goto ON_VAL_END
+					}
+
+					// Reset to parent context
+					// dumpStack("BEFORE RESET")
+					topIndex := len(recurStack) - 1
+					resetTo := d.stackExp[si].RecursionStack[topIndex]
+					// fmt.Printf("%d\tRESET SI %d\tTO %p OFFSET %d AND MOVE TO %d\n",
+					// 	ti, si, resetTo.Dest, resetTo.Offset, resetTo.ContainerFrame)
+					d.stackExp[si].Dest = resetTo.Dest
+					d.stackExp[si].Offset = resetTo.Offset
+
+					// Pop recursion stack
+					recurStack[topIndex].Dest = nil
+					d.stackExp[si].RecursionStack = recurStack[:topIndex]
+					si = d.stackExp[resetTo.ContainerFrame].ParentFrameIndex
+					// dumpStack("AFTER RESET")
+					continue
+				}
+				si--
 				goto ON_VAL_END
 			}
 			continue
+
+		ON_RECUR_OBJ_END:
+			if l := len(d.stackExp[si].RecursionStack); l > 0 {
+				siCon := d.stackExp[si].RecursionStack[l-1].ContainerFrame
+				// fmt.Printf("%d\tRECOBJ END\tSI %d CONTAINER %d\n",
+				// 	ti, si, siCon)
+				switch d.stackExp[siCon].Type {
+				case ExpectTypeSliceRecur:
+					d.stackExp[si].Offset += d.stackExp[si].Size
+				case ExpectTypeMapRecur:
+					si = siCon
+					// fmt.Println("BACK TO RECUR MAP", si)
+				}
+				continue
+			}
+			// Here we expect to fallthrough directly to ON_VAL_END!
 
 		ON_VAL_END:
 			if siCon := d.stackExp[si].ParentFrameIndex; siCon != noParentFrame {
@@ -3035,7 +3378,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					si--
 				case ExpectTypeArray:
 					d.stackExp[si].Len++
-					if d.stackExp[si].Len >= d.stackExp[si].Cap {
+					if d.stackExp[si].Len >= d.stackExp[si].CapOrRecurFrame {
 						// Skip all extra values
 					SKIP_ALL_EXTRA_VALUES:
 						for l := 1; ; ti++ {
@@ -3055,7 +3398,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeSlice:
 					d.stackExp[si].Offset += d.stackExp[si].Size
 
-				case ExpectTypeMap, ExpectTypeStruct:
+				case ExpectTypeMap, ExpectTypeStruct, ExpectTypeStructRecur:
 					si = siCon
 					if si == noParentFrame {
 						err = ErrorDecode{
@@ -3108,6 +3451,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 		}
 	}
 	*t = *(*T)(d.stackExp[0].Dest)
+	// fmt.Println("FU", d.stackExp[0].Dest)
 	return ErrorDecode{}
 }
 
