@@ -19,6 +19,7 @@ Roadmap:
 - [x] Primitive types
 - [x] Struct types
     - [x] Type `struct{}`
+    - [ ] Recursive struct types
 - [x] Slices
 - [x] Arrays
 - [x] Type `any`
