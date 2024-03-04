@@ -62,7 +62,7 @@ const (
 	// ExpectTypePtr is any pointer type
 	ExpectTypePtr
 
-	// ExpectTypeMap is type `any``
+	// ExpectTypeAny is type `any`
 	ExpectTypeAny
 
 	// ExpectTypeMap is any map type
