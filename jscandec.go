@@ -3307,9 +3307,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// dumpStack("BEFORE RESET")
 					topIndex := len(recurStack) - 1
 					resetTo := d.stackExp[recursiveFrame].RecursionStack[topIndex]
-					d.stackExp[si].Dest = resetTo.Dest
-					d.stackExp[si].Offset = resetTo.Offset
-					fields := d.stackExp[si].Fields
+					d.stackExp[recursiveFrame].Dest = resetTo.Dest
+					d.stackExp[recursiveFrame].Offset = resetTo.Offset
+					fields := d.stackExp[recursiveFrame].Fields
 					for i := range fields {
 						d.stackExp[fields[i].FrameIndex].Dest = resetTo.Dest
 					}
