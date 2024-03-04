@@ -1066,6 +1066,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	d.stackExp[0].Dest = unsafe.Pointer(t)
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
+		// ti stands for the token index and points at the current token
 		for ti := 0; ti < len(tokens); {
 			switch d.stackExp[si].Type {
 			case ExpectTypePtr:
