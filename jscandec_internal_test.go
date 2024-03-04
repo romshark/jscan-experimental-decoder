@@ -79,6 +79,9 @@ func TestAppendTypeToStack(t *testing.T) {
 	type SStringUint64 struct {
 		Uint64 uint64 `json:",string"`
 	}
+	type SRecurMap struct {
+		Recursion map[string]SRecurMap
+	}
 
 	tpS3 := reflect.TypeOf(S3{})
 	tpS4 := reflect.TypeOf(S4{})
@@ -403,7 +406,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeArrayLen0,
-					Cap:              3,
+					CapOrRecurFrame:  3,
 					ParentFrameIndex: 0,
 				},
 			},
@@ -420,7 +423,7 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
 					ParentFrameIndex: 0,
-					Cap:              4,
+					CapOrRecurFrame:  4,
 				},
 			},
 		},
@@ -477,7 +480,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				{ // Value frame
 					Type:             ExpectTypeUint8,
 					Size:             reflect.TypeOf(byte(0)).Size(),
-					Cap:              256,
+					CapOrRecurFrame:  256,
 					ParentFrameIndex: 3,
 				},
 			},
@@ -1338,6 +1341,41 @@ func TestAppendTypeToStack(t *testing.T) {
 					Type:             ExpectTypeUint64String,
 					Size:             reflect.TypeOf(uint64(0)).Size(),
 					ParentFrameIndex: 0,
+				},
+			},
+		},
+		{
+			Input: SRecurMap{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:  ExpectTypeStructRecur,
+					RType: reflect.TypeOf(SRecurMap{}),
+					Fields: []fieldStackFrame{
+						{FrameIndex: 1, Name: "Recursion"},
+					},
+					RecursionStack:   make([]recursionStackFrame, 0, 64),
+					Size:             reflect.TypeOf(SStringUint64{}).Size(),
+					ParentFrameIndex: noParentFrame,
+				},
+				{
+					Type: ExpectTypeMapRecur,
+					MapType: getTyp(reflect.TypeOf(
+						map[string]SRecurMap{},
+					)),
+					MapValueType: getTyp(reflect.TypeOf(
+						SRecurMap{},
+					)),
+					MapCanUseAssignFaststr: true,
+					Size: reflect.TypeOf(
+						map[string]SRecurMap{},
+					).Size(),
+					CapOrRecurFrame:  0,
+					ParentFrameIndex: 0,
+				},
+				{
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 1,
 				},
 			},
 		},
