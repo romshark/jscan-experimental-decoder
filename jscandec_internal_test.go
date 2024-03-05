@@ -415,7 +415,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeArrayLen0,
-					RecurFrame:       3,
+					Cap:              3,
 					ParentFrameIndex: 0,
 				},
 			},
@@ -432,7 +432,7 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
 					ParentFrameIndex: 0,
-					RecurFrame:       4,
+					Cap:              4,
 				},
 			},
 		},
@@ -489,7 +489,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				{ // Value frame
 					Type:             ExpectTypeUint8,
 					Size:             reflect.TypeOf(byte(0)).Size(),
-					RecurFrame:       256,
+					Cap:              256,
 					ParentFrameIndex: 3,
 				},
 			},
