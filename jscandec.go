@@ -1189,7 +1189,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 	si := uint32(0)
 	d.stackExp[0].Dest = unsafe.Pointer(t)
-	// fmt.Printf("VROOT %p\n", d.stackExp[0].Dest)
 
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		// ti stands for the token index and points at the current token
@@ -1208,8 +1207,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*unsafe.Pointer)(p) = dp
 				}
 				continue
-			case ExpectTypePtrRecur:
-				panic("TODO")
+
 			case ExpectTypeJSONUnmarshaler:
 				goto ON_JSON_UNMARSHALER
 			}
@@ -1875,6 +1873,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Skip
 				case ExpectTypeStruct, ExpectTypeStructRecur:
 					// Skip
+				case ExpectTypePtr, ExpectTypePtrRecur:
+					*(*unsafe.Pointer)(p) = nil
 				case ExpectTypeBool:
 					*(*bool)(p) = zeroBool
 				case ExpectTypeStr:
@@ -2841,6 +2841,52 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END
 
+				case ExpectTypePtrRecur:
+					p := unsafe.Pointer(
+						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+					)
+
+					siPointer := si
+					si = uint32(d.stackExp[si].CapOrRecurFrame)
+					// Push recursion stack
+					// fmt.Printf("%d\tPUSH STACK %p OFFSET %d SI %d\n",
+					// 	ti,
+					// 	d.stackExp[si].Dest,
+					// 	d.stackExp[si].Offset,
+					// 	si)
+					d.stackExp[si].RecursionStack = append(
+						d.stackExp[si].RecursionStack, recursionStackFrame{
+							Dest:           d.stackExp[si].Dest,
+							Offset:         d.stackExp[si].Offset,
+							ContainerFrame: siPointer,
+						},
+					)
+					// fmt.Printf("%d\tRECSTACK: %v\n", ti, d.stackExp[si].RecursionStack)
+
+					var dp unsafe.Pointer
+					if *(*unsafe.Pointer)(p) != nil {
+						dp = *(*unsafe.Pointer)(p)
+						// fmt.Printf("%d\tJUST SET %p\n", ti, dp)
+					} else {
+						dp = allocate(d.stackExp[si].Size)
+						// fmt.Printf(
+						// 	"%d\tALLOCATED NEW INSTANCE %p SIZE %d SET SI %d WRITE AT %p OFFSET %d\n",
+						// 	ti, dp, d.stackExp[si].Size, si, d.stackExp[si].Dest, d.stackExp[si].Offset)
+						*(*unsafe.Pointer)(p) = dp
+					}
+					d.stackExp[si].Dest = dp
+
+					if tokens[ti].Elements == 0 {
+						ti += 2
+						goto ON_RECUR_OBJ_END
+					}
+					// Point all fields to the struct, the offsets are already
+					// set statically during decoder init time.
+					for i := range d.stackExp[si].Fields {
+						d.stackExp[d.stackExp[si].Fields[i].FrameIndex].Dest = dp
+					}
+					ti++
+
 				case ExpectTypeMapRecur:
 					// Push recursion stack
 					recursiveFrame := d.stackExp[si].CapOrRecurFrame
@@ -2863,7 +2909,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						*(*unsafe.Pointer)(p) = makemap(
 							d.stackExp[si].MapType, tokens[ti].Elements,
 						)
-						// fmt.Printf("INIT MAP %p TO %p OFFSET %d\n",
+						// fmt.Printf("🌈 INIT MAP %p TO %p OFFSET %d\n",
 						// 	*(*unsafe.Pointer)(p), d.stackExp[si].Dest, d.stackExp[si].Offset)
 					}
 					if tokens[ti].Elements == 0 {
@@ -3015,7 +3061,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
 
-					// fmt.Printf("KEY %q SI %d ON %p\n", key, si, d.stackExp[si].Dest)
+					// fmt.Printf("\nKEY %q SI %d ON %p\n", key, si, d.stackExp[si].Dest)
 
 					typMap := d.stackExp[si].MapType
 					typVal := d.stackExp[si].MapValueType
@@ -3284,7 +3330,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				ti++
 
 			case jscan.TokenTypeObjectEnd:
-				// fmt.Printf("OBJ END TI %d SI %d\n", ti, si)
+				// fmt.Printf("%d\tOBJ END SI %d\n", ti, si)
 				ti++
 				switch d.stackExp[si].Type {
 				case ExpectTypeStruct:
@@ -3296,7 +3342,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					recurStack := d.stackExp[recursiveFrame].RecursionStack
 					if len(recurStack) < 1 {
 						// In map of the root recursive struct
-						// si = uint32(d.stackExp[si].CapOrRecurFrame)
+						si = uint32(d.stackExp[si].CapOrRecurFrame)
 						// fmt.Printf("%d\tIN ROOT MAP\n", ti)
 						goto ON_VAL_END
 					}
@@ -3357,15 +3403,44 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 		ON_RECUR_OBJ_END:
 			if l := len(d.stackExp[si].RecursionStack); l > 0 {
-				siCon := d.stackExp[si].RecursionStack[l-1].ContainerFrame
-				// fmt.Printf("%d\tRECOBJ END\tSI %d CONTAINER %d\n",
-				// 	ti, si, siCon)
-				switch d.stackExp[siCon].Type {
+				top := d.stackExp[si].RecursionStack[l-1]
+				// fmt.Printf("%d\tRECOBJ END\tSI %d TOPDEST %p CONTAINER %d\n",
+				// 	ti, si, top.Dest, top.ContainerFrame)
+				switch d.stackExp[top.ContainerFrame].Type {
 				case ExpectTypeSliceRecur:
 					d.stackExp[si].Offset += d.stackExp[si].Size
+				case ExpectTypePtrRecur:
+					recurStack := d.stackExp[si].RecursionStack
+					if len(recurStack) < 1 {
+						// In map of the root recursive struct
+						// fmt.Printf("%d\tIN ROOT STRUCT\n", ti)
+						goto ON_VAL_END
+					}
+
+					// Reset to parent context
+					// dumpStack("BEFORE RESET")
+					topIndex := len(recurStack) - 1
+					d.stackExp[si].Dest = top.Dest
+					d.stackExp[si].Offset = top.Offset
+					fields := d.stackExp[si].Fields
+					for i := range fields {
+						d.stackExp[fields[i].FrameIndex].Dest = top.Dest
+					}
+
+					// Pop recursion stack
+					recurStack[topIndex].Dest = nil
+					d.stackExp[si].RecursionStack = recurStack[:topIndex]
+
+					si = uint32(d.stackExp[top.ContainerFrame].ParentFrameIndex)
+					// fmt.Println("EXITED POINTER-RECURSIVE STRUCT", si)
+					// dumpStack("AFTER RESET")
+
 				case ExpectTypeMapRecur:
-					si = siCon
-					// fmt.Println("BACK TO RECUR MAP", si)
+					si = top.ContainerFrame
+					// Set the top stack destination so the next key gets assigned to it.
+					// Otherwise we'll be in the destination of the previously assigned
+					// key, which will point to an empty map.
+					d.stackExp[si].Dest = top.Dest
 				}
 				continue
 			}
