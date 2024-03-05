@@ -1847,8 +1847,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*map[string]string)(p) = nil
 				case ExpectTypeMap:
 					*(*map[any]any)(p) = nil
-				case ExpectTypeSlice:
+				case ExpectTypeSlice, ExpectTypeSliceRecur:
 					// Skip
+					*(*[]any)(p) = nil
 				case ExpectTypeStruct, ExpectTypeStructRecur:
 					// Skip
 				case ExpectTypePtr, ExpectTypePtrRecur:
