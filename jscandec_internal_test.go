@@ -79,8 +79,17 @@ func TestAppendTypeToStack(t *testing.T) {
 	type SStringUint64 struct {
 		Uint64 uint64 `json:",string"`
 	}
+	type SRecurSlice struct {
+		ID        string
+		Recursion []SRecurSlice
+	}
 	type SRecurMap struct {
+		ID        string
 		Recursion map[string]SRecurMap
+	}
+	type SRecurPtr struct {
+		ID        string
+		Recursion *SRecurPtr
 	}
 
 	tpS3 := reflect.TypeOf(S3{})
@@ -1345,17 +1354,63 @@ func TestAppendTypeToStack(t *testing.T) {
 			},
 		},
 		{
-			Input: SRecurMap{},
+			Input: []SRecurSlice{},
 			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]SRecurSlice{}).Size(),
+					ParentFrameIndex: noParentFrame,
+				},
+				{
+					Type:  ExpectTypeStructRecur,
+					RType: reflect.TypeOf(SRecurSlice{}),
+					Fields: []fieldStackFrame{
+						{FrameIndex: 2, Name: "ID"},
+						{FrameIndex: 3, Name: "Recursion"},
+					},
+					RecursionStack:   make([]recursionStackFrame, 0, 64),
+					Size:             reflect.TypeOf(SRecurSlice{}).Size(),
+					ParentFrameIndex: 0,
+				},
+				{
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					Offset:           reflect.TypeOf(SRecurSlice{}).Field(0).Offset,
+					ParentFrameIndex: 1,
+				},
+				{
+					Type:             ExpectTypeSliceRecur,
+					Size:             reflect.TypeOf([]SRecurSlice{}).Size(),
+					Offset:           reflect.TypeOf(SRecurSlice{}).Field(1).Offset,
+					CapOrRecurFrame:  1,
+					ParentFrameIndex: 1,
+				},
+			},
+		},
+		{
+			Input: []SRecurMap{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]SRecurMap{}).Size(),
+					ParentFrameIndex: noParentFrame,
+				},
 				{
 					Type:  ExpectTypeStructRecur,
 					RType: reflect.TypeOf(SRecurMap{}),
 					Fields: []fieldStackFrame{
-						{FrameIndex: 1, Name: "Recursion"},
+						{FrameIndex: 2, Name: "ID"},
+						{FrameIndex: 3, Name: "Recursion"},
 					},
 					RecursionStack:   make([]recursionStackFrame, 0, 64),
-					Size:             reflect.TypeOf(SStringUint64{}).Size(),
-					ParentFrameIndex: noParentFrame,
+					Size:             reflect.TypeOf(SRecurMap{}).Size(),
+					ParentFrameIndex: 0,
+				},
+				{
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					Offset:           reflect.TypeOf(SRecurMap{}).Field(0).Offset,
+					ParentFrameIndex: 1,
 				},
 				{
 					Type: ExpectTypeMapRecur,
@@ -1369,12 +1424,47 @@ func TestAppendTypeToStack(t *testing.T) {
 					Size: reflect.TypeOf(
 						map[string]SRecurMap{},
 					).Size(),
-					CapOrRecurFrame:  0,
+					Offset:           reflect.TypeOf(SRecurMap{}).Field(1).Offset,
+					CapOrRecurFrame:  1,
+					ParentFrameIndex: 1,
+				},
+				{
+					Type:             ExpectTypeStr,
+					Size:             reflect.TypeOf(string("")).Size(),
+					ParentFrameIndex: 3,
+				},
+			},
+		},
+		{
+			Input: []SRecurPtr{},
+			ExpectStack: []stackFrame[string]{
+				{
+					Type:             ExpectTypeSlice,
+					Size:             reflect.TypeOf([]SRecurPtr{}).Size(),
+					ParentFrameIndex: noParentFrame,
+				},
+				{
+					Type:  ExpectTypeStructRecur,
+					RType: reflect.TypeOf(SRecurPtr{}),
+					Fields: []fieldStackFrame{
+						{FrameIndex: 2, Name: "ID"},
+						{FrameIndex: 3, Name: "Recursion"},
+					},
+					RecursionStack:   make([]recursionStackFrame, 0, 64),
+					Size:             reflect.TypeOf(SRecurPtr{}).Size(),
 					ParentFrameIndex: 0,
 				},
 				{
 					Type:             ExpectTypeStr,
 					Size:             reflect.TypeOf(string("")).Size(),
+					Offset:           reflect.TypeOf(SRecurPtr{}).Field(0).Offset,
+					ParentFrameIndex: 1,
+				},
+				{
+					Type:             ExpectTypePtrRecur,
+					Size:             reflect.TypeOf((*SRecurPtr)(nil)).Size(),
+					Offset:           reflect.TypeOf(SRecurPtr{}).Field(1).Offset,
+					CapOrRecurFrame:  1,
 					ParentFrameIndex: 1,
 				},
 			},
