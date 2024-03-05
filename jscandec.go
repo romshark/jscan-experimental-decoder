@@ -3277,8 +3277,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						goto ON_VAL_END
 					}
 
-					si = uint32(d.stackExp[si].ParentFrameIndex)
-
 					// Reset to parent context
 					topIndex := len(recurStack) - 1
 					resetTo := d.stackExp[recursiveFrame].RecursionStack[topIndex]
@@ -3292,6 +3290,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Pop recursion stack
 					recurStack[topIndex].Dest = nil
 					d.stackExp[recursiveFrame].RecursionStack = recurStack[:topIndex]
+					si = d.stackExp[si].ParentFrameIndex
 					continue
 				}
 				goto ON_RECUR_OBJ_END
@@ -3310,6 +3309,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					resetTo := d.stackExp[si].RecursionStack[topIndex]
 					d.stackExp[si].Dest = resetTo.Dest
 					d.stackExp[si].Offset = resetTo.Offset
+					fields := d.stackExp[si].Fields
+					for i := range fields {
+						d.stackExp[fields[i].FrameIndex].Dest = resetTo.Dest
+					}
 
 					// Pop recursion stack
 					recurStack[topIndex].Dest = nil
@@ -3347,8 +3350,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					// Pop recursion stack
 					recurStack[topIndex].Dest = nil
 					d.stackExp[si].RecursionStack = recurStack[:topIndex]
-
-					si = uint32(d.stackExp[top.ContainerFrame].ParentFrameIndex)
+					si = d.stackExp[top.ContainerFrame].ParentFrameIndex
+					continue
 
 				case ExpectTypeMapRecur:
 					si = top.ContainerFrame
