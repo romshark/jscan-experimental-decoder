@@ -417,10 +417,12 @@ type stackFrame[S []byte | string] struct {
 	// keeps track of its recursion through pointers/maps/slices.
 	RecursionStack []recursionStackFrame
 
-	// CapOrRecurFrame defines the capacity of the parent array for array item frames.
-	// For ExpectTypePtrRecur, ExpectTypeMapRecur and ExpectTypeSliceRecur this
-	// is the index of the recursive ExpectTypeStructRecur frame.
-	CapOrRecurFrame int
+	// Cap defines the capacity of the parent array for array item frames.
+	Cap int
+
+	// RecurFrame defines the index of the recursive ExpectTypeStructRecur frame and
+	// is relevant to ExpectTypePtrRecur, ExpectTypeMapRecur and ExpectTypeSliceRecur.
+	RecurFrame int
 
 	// Len is relevant to array frames only and defines their current length.
 	Len int // Overwritten at runtime
@@ -657,7 +659,7 @@ func appendTypeToStack[S []byte | string](
 
 		// Link array element to the array frame.
 		stack[newAtIndex].ParentFrameIndex = parentIndex
-		stack[newAtIndex].CapOrRecurFrame = t.Len()
+		stack[newAtIndex].Cap = t.Len()
 
 	case reflect.Slice:
 		elem := t.Elem()
@@ -681,7 +683,7 @@ func appendTypeToStack[S []byte | string](
 						Type:             ExpectTypeSliceRecur,
 						Size:             t.Size(),
 						ParentFrameIndex: noParentFrame,
-						CapOrRecurFrame:  i,
+						RecurFrame:       i,
 					}), nil
 				}
 			}
@@ -804,7 +806,7 @@ func appendTypeToStack[S []byte | string](
 						MapValueType:           getTyp(t.Elem()),
 						MapCanUseAssignFaststr: canUseAssignFaststr(t),
 						ParentFrameIndex:       noParentFrame,
-						CapOrRecurFrame:        i,
+						RecurFrame:             i,
 					})
 					{
 						newAtIndex := len(stack)
@@ -1056,7 +1058,7 @@ func appendTypeToStack[S []byte | string](
 						Type:             ExpectTypePtrRecur,
 						Size:             t.Size(),
 						ParentFrameIndex: noParentFrame,
-						CapOrRecurFrame:  i,
+						RecurFrame:       i,
 					}), nil
 				}
 			}
@@ -1999,7 +2001,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 
-					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					recursiveFrame := d.stackExp[si].RecurFrame
 					elementSize := d.stackExp[recursiveFrame].Size
 					elems := uintptr(tokens[ti].Elements)
 
@@ -2813,7 +2815,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					)
 
 					siPointer := si
-					si = uint32(d.stackExp[si].CapOrRecurFrame)
+					si = uint32(d.stackExp[si].RecurFrame)
 					// Push recursion stack
 					d.stackExp[si].RecursionStack = append(
 						d.stackExp[si].RecursionStack, recursionStackFrame{
@@ -2845,7 +2847,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeMapRecur:
 					// Push recursion stack
-					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					recursiveFrame := d.stackExp[si].RecurFrame
 					d.stackExp[recursiveFrame].RecursionStack = append(
 						d.stackExp[recursiveFrame].RecursionStack, recursionStackFrame{
 							Dest:           d.stackExp[recursiveFrame].Dest,
@@ -3236,20 +3238,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
 					}
 
-					// Point the value stack frame to the newly allocated map cell.
-					// d.stackExp[si+1].Dest = pNewData
-
 					if d.stackExp[si].Type == ExpectTypeMapRecur {
-						recursiveFrame := d.stackExp[si].CapOrRecurFrame
-						// // Push recursion stack before moving back to the recursive frame.
-						// d.stackExp[recursiveFrame].RecursionStack = append(
-						// 	d.stackExp[recursiveFrame].RecursionStack,
-						// 	recursionStackFrame{
-						// 		Dest:           d.stackExp[recursiveFrame].Dest,
-						// 		Offset:         d.stackExp[recursiveFrame].Offset,
-						// 		ContainerFrame: si,
-						// 	},
-						// )
+						recursiveFrame := d.stackExp[si].RecurFrame
 						si = uint32(recursiveFrame)
 					} else {
 						// For non-recursive maps the value frame is guaranteed to
@@ -3279,11 +3269,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeStruct:
 					goto ON_VAL_END
 				case ExpectTypeMapRecur:
-					recursiveFrame := d.stackExp[si].CapOrRecurFrame
+					recursiveFrame := d.stackExp[si].RecurFrame
 					recurStack := d.stackExp[recursiveFrame].RecursionStack
 					if len(recurStack) < 1 {
 						// In map of the root recursive struct
-						si = uint32(d.stackExp[si].CapOrRecurFrame)
+						si = uint32(d.stackExp[si].RecurFrame)
 						goto ON_VAL_END
 					}
 
@@ -3378,7 +3368,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					si--
 				case ExpectTypeArray:
 					d.stackExp[si].Len++
-					if d.stackExp[si].Len >= d.stackExp[si].CapOrRecurFrame {
+					if d.stackExp[si].Len >= d.stackExp[si].Cap {
 						// Skip all extra values
 					SKIP_ALL_EXTRA_VALUES:
 						for l := 1; ; ti++ {
