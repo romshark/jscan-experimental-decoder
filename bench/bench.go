@@ -473,7 +473,10 @@ func FastjsonArrayInt(j []byte) ([]int, error) {
 	va := v.GetArray()
 	a := make([]int, len(va))
 	for i := range va {
-		a[i] = va[i].GetInt()
+		a[i], err = va[i].Int()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return a, nil
 }
