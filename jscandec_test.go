@@ -3302,3 +3302,27 @@ func TestErrStringTagOptionOnUnsupportedType(t *testing.T) {
 		require.Nil(t, dec)
 	})
 }
+
+func TestMemReuse(t *testing.T) {
+	optsInit := jscandec.DefaultInitOptions
+	optsDec := jscandec.DefaultOptions
+
+	type S []string
+	t.Run("string", func(t *testing.T) {
+		tok := jscan.NewTokenizer[string](1, 16)
+		dec, err := jscandec.NewDecoder[string, S](tok, optsInit)
+		require.NoError(t, err)
+
+		var v1 S
+		errDec := dec.Decode(`["first","second","third"]`, &v1, optsDec)
+		require.False(t, errDec.IsErr())
+		require.Equal(t, S{"first", "second", "third"}, v1)
+
+		var v2 S
+		errDec = dec.Decode(`["FIRST","SECOND","THIRD"]`, &v2, optsDec)
+		require.False(t, errDec.IsErr())
+
+		require.Equal(t, S{"first", "second", "third"}, v1)
+		require.Equal(t, S{"FIRST", "SECOND", "THIRD"}, v2)
+	})
+}
