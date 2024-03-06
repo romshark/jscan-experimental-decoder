@@ -116,7 +116,7 @@ var tests = []test{
 	}(),
 }
 
-func runTestValid[S ~[]byte | ~string, O ~[]byte | ~string](
+func runTestValid[S []byte | string, O []byte | string](
 	t *testing.T, name string, input S, expect O,
 ) {
 	t.Run(name, func(t *testing.T) {
@@ -138,7 +138,6 @@ func runTestValid[S ~[]byte | ~string, O ~[]byte | ~string](
 }
 
 func TestValid(t *testing.T) {
-	type CustomString string
 	for _, td := range tests {
 		runTestValid[string, string](
 			t, td.Name+"/string2string", td.Input, td.Expect,
@@ -151,9 +150,6 @@ func TestValid(t *testing.T) {
 		)
 		runTestValid[[]byte, string](
 			t, td.Name+"/bytes2string", []byte(td.Input), td.Expect,
-		)
-		runTestValid[CustomString, CustomString](
-			t, td.Name+"/bytes2string", CustomString(td.Input), CustomString(td.Expect),
 		)
 	}
 }

@@ -8,22 +8,24 @@ import (
 // Valid returns the unescaped version of str relying on str to be valid.
 // Don't use this function if str isn't guaranteed to contain no
 // invalid escape sequences.
-func Valid[S ~[]byte | ~string, O ~[]byte | ~string](str S) O {
+func Valid[S []byte | string, O []byte | string](str S) O {
 	var oz O
 	if len(str) < 1 {
 		return oz
 	}
+
+	// Copy the string because it probably originates from a token
+	// which will be reused across Decode calls.
 	var s string
 	switch in := any(str).(type) {
 	case string:
-		s = in
+		cp := unsafe.Slice(unsafe.StringData(in), len(in))
+		copy(cp, in)
+		s = unsafe.String(unsafe.SliceData(cp), len(in))
 	case []byte:
-		// Avoid copying str to a string, treat the bytes as read-only instead
-		// since str is guaranteed to remain immutable.
-		s = unsafe.String(unsafe.SliceData(in), len(in))
-	default:
-		s = string(str)
+		s = string(in)
 	}
+
 	i := strings.IndexByte(s, '\\')
 	if i < 0 {
 		return O(s)

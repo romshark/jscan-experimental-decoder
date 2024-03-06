@@ -3524,7 +3524,7 @@ func fieldFrameIndexByName[S []byte | string](fields []fieldStackFrame, name S) 
 	return noParentFrame
 }
 
-func decodeAny[S ~[]byte | ~string](
+func decodeAny[S []byte | string](
 	str S, tokens []jscan.Token[S],
 ) (any, []jscan.Token[S], error) {
 	switch tokens[0].Type {
