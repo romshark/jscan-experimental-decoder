@@ -19,9 +19,7 @@ func Valid[S []byte | string, O []byte | string](str S) O {
 	var s string
 	switch in := any(str).(type) {
 	case string:
-		cp := unsafe.Slice(unsafe.StringData(in), len(in))
-		copy(cp, in)
-		s = unsafe.String(unsafe.SliceData(cp), len(in))
+		s = in
 	case []byte:
 		s = string(in)
 	}
