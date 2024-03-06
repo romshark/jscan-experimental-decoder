@@ -35,3 +35,4 @@ Roadmap:
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
 - [ ] `encoding/json` compatible drop-in replacement package `jscandec/std`
+    - [ ] `encoding/json` compatible error messages
