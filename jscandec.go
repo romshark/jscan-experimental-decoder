@@ -3251,7 +3251,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					d.stackExp[si].Dest = pNewData
 
 					// Zero struct values
-					if d.stackExp[si].Type == ExpectTypeStruct {
+					if d.stackExp[si].Type == ExpectTypeStruct ||
+						d.stackExp[si].Type == ExpectTypeStructRecur {
 						typedmemclr(typVal, pNewData)
 					}
 
