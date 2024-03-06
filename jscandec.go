@@ -2967,7 +2967,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeStruct, ExpectTypeStructRecur:
 				SCAN_KEYVALS:
 					for {
-						key := unescape.Valid[S, string](
+						key := unescape.Valid[S, S](
 							s[tokens[ti].Index+1 : tokens[ti].End-1],
 						)
 						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)

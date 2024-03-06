@@ -1,6 +1,7 @@
 package unescape
 
 import (
+	"bytes"
 	"strings"
 	"unsafe"
 )
@@ -14,19 +15,21 @@ func Valid[S []byte | string, O []byte | string](str S) O {
 		return oz
 	}
 
-	// Copy the string because it probably originates from a token
-	// which will be reused across Decode calls.
+	var i int
 	var s string
 	switch in := any(str).(type) {
 	case string:
+		if i = strings.IndexByte(in, '\\'); i == -1 {
+			return O(str) // No escaping necessary
+		}
 		s = in
 	case []byte:
+		if i = bytes.IndexByte(in, '\\'); i == -1 {
+			return O(str) // No escaping necessary
+		}
+		// Copy the string because it originates from a token
+		// which will be reused across Decode calls.
 		s = string(in)
-	}
-
-	i := strings.IndexByte(s, '\\')
-	if i < 0 {
-		return O(s)
 	}
 	buf := make([]byte, 0, len(s))
 	for {
