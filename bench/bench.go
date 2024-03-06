@@ -154,7 +154,7 @@ func JscanPtrInt(t *jscan.Tokenizer[[]byte], str []byte) (s *int, err error) {
 	return &i, nil
 }
 
-func JscanStringSlice(
+func JscanArrayString(
 	t *jscan.Tokenizer[[]byte], str []byte,
 ) (s []string, err error) {
 	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {

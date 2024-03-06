@@ -113,13 +113,13 @@ func TestImplementationsDecodeArrayString(t *testing.T) {
 
 	t.Run("hand/jscan", func(t *testing.T) {
 		tokenizer := jscan.NewTokenizer[[]byte](2048, 2048*1024)
-		v, err := bench.JscanStringSlice(tokenizer, []byte(in))
+		v, err := bench.JscanArrayString(tokenizer, []byte(in))
 		require.NoError(t, err)
 		require.Equal(t, expect(), v)
 	})
 }
 
-func BenchmarkDecodeArrayString12K(b *testing.B) {
+func BenchmarkDecodeArrayString(b *testing.B) {
 	in, err := os.ReadFile("../testdata/array_string_15k.json")
 	if err != nil {
 		b.Fatal(err)
@@ -251,7 +251,7 @@ func BenchmarkDecodeArrayString12K(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			var v []string
 			var err error
-			if v, err = bench.JscanStringSlice(tokenizer, in); err != nil {
+			if v, err = bench.JscanArrayString(tokenizer, in); err != nil {
 				b.Fatal(err)
 			}
 			runtime.KeepAlive(v)
