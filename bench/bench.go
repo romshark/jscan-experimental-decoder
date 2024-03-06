@@ -10,11 +10,9 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-func JscanAny[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
-) (s any, err error) {
-	var decode func(tokens []jscan.Token[S]) (any, []jscan.Token[S], error)
-	decode = func(tokens []jscan.Token[S]) (any, []jscan.Token[S], error) {
+func JscanAny(t *jscan.Tokenizer[[]byte], str []byte) (s any, err error) {
+	var decode func(tokens []jscan.Token[[]byte]) (any, []jscan.Token[[]byte], error)
+	decode = func(tokens []jscan.Token[[]byte]) (any, []jscan.Token[[]byte], error) {
 		switch tokens[0].Type {
 		case jscan.TokenTypeNull:
 			return nil, tokens[1:], nil
@@ -58,7 +56,7 @@ func JscanAny[S []byte | string](
 		return nil, nil, nil
 	}
 
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		s, _, err = decode(tokens)
 		return err != nil
 	})
@@ -71,10 +69,8 @@ func JscanAny[S []byte | string](
 	return s, nil
 }
 
-func JscanBoolMatrix[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
-) (s [][]bool, err error) {
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+func JscanBoolMatrix(t *jscan.Tokenizer[[]byte], str []byte) (s [][]bool, err error) {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeArray {
 			return true
 		}
@@ -116,10 +112,8 @@ func JscanBoolMatrix[S []byte | string](
 	return s, nil
 }
 
-func JscanIntSlice[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
-) (s []int, err error) {
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+func JscanIntSlice(t *jscan.Tokenizer[[]byte], str []byte) (s []int, err error) {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeArray {
 			return true
 		}
@@ -145,11 +139,9 @@ func JscanIntSlice[S []byte | string](
 	return s, nil
 }
 
-func JscanPtrInt[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
-) (s *int, err error) {
+func JscanPtrInt(t *jscan.Tokenizer[[]byte], str []byte) (s *int, err error) {
 	var i int
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		i, err = tokens[0].Int(str)
 		return err != nil
 	})
@@ -162,10 +154,10 @@ func JscanPtrInt[S []byte | string](
 	return &i, nil
 }
 
-func JscanStringSlice[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
+func JscanStringSlice(
+	t *jscan.Tokenizer[[]byte], str []byte,
 ) (s []string, err error) {
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeArray {
 			return true
 		}
@@ -191,10 +183,10 @@ func JscanStringSlice[S []byte | string](
 	return s, nil
 }
 
-func JscanMapStringString[S []byte | string](
-	t *jscan.Tokenizer[S], str S,
+func JscanMapStringString(
+	t *jscan.Tokenizer[[]byte], str []byte,
 ) (m map[string]string, err error) {
-	errk := t.Tokenize(str, func(tokens []jscan.Token[S]) bool {
+	errk := t.Tokenize(str, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeObject {
 			return true
 		}
@@ -219,10 +211,8 @@ func JscanMapStringString[S []byte | string](
 	return m, nil
 }
 
-func JscanStruct3[S []byte | string](
-	t *jscan.Tokenizer[S], src S,
-) (s Struct3, err error) {
-	errk := t.Tokenize(src, func(tokens []jscan.Token[S]) bool {
+func JscanStruct3(t *jscan.Tokenizer[[]byte], src []byte) (s Struct3, err error) {
+	errk := t.Tokenize(src, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeObject {
 			return true
 		}
@@ -268,10 +258,10 @@ func JscanStruct3[S []byte | string](
 	return s, nil
 }
 
-func JscanStructVector3D[S []byte | string](
-	t *jscan.Tokenizer[S], src S,
+func JscanStructVector3D(
+	t *jscan.Tokenizer[[]byte], src []byte,
 ) (s StructVector3D, err error) {
-	errk := t.Tokenize(src, func(tokens []jscan.Token[S]) bool {
+	errk := t.Tokenize(src, func(tokens []jscan.Token[[]byte]) bool {
 		if tokens[0].Type != jscan.TokenTypeObject {
 			return true
 		}
