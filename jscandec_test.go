@@ -1812,6 +1812,186 @@ func TestDecodeStructRecursiveSlice(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
 
+func TestDecodeStructRecursiveMap(t *testing.T) {
+	type S struct {
+		ID      string
+		Name    string
+		Recurse map[string]S
+	}
+	s := newTestSetup[S](t, *jscandec.DefaultOptions)
+	s.TestOK(t, "null",
+		`null`, S{})
+	s.TestOK(t, "empty",
+		`{}`, S{})
+	s.TestOK(t, "root",
+		`{"id":"root"}`, S{ID: "root"})
+	s.TestOK(t, "2_level",
+		`{"id":"root","recurse":{"L2": {"id":"level2", "name": "Level 2"}}}`,
+		S{
+			ID: "root", Recurse: map[string]S{
+				"L2": {
+					ID: "level2", Name: "Level 2",
+				},
+			},
+		})
+	s.TestOK(t, "3_level",
+		`{
+			"id": "root",
+			"recurse": {"L2": {
+				"id": "level2",
+				"recurse": {"L3": {
+					"id": "level3"
+				}}
+			}}
+		}`,
+		S{
+			ID: "root", Recurse: map[string]S{
+				"L2": {
+					ID: "level2", Recurse: map[string]S{
+						"L3": {
+							ID: "level3",
+						},
+					},
+				},
+			},
+		})
+	s.TestOK(t, "3_level_reversed_field_order",
+		`{
+			"recurse": {"L2": {
+				"recurse": {"L3": {
+					"id": "level3"
+				}},
+				"id": "level2"
+			}},
+			"id": "root"
+		}`,
+		S{ID: "root", Recurse: map[string]S{
+			"L2": {
+				ID: "level2", Recurse: map[string]S{
+					"L3": {ID: "level3"},
+				},
+			},
+		}})
+	s.TestOK(t, "3_level_missing_field",
+		`{
+			"recurse": {"E": {
+				"recurse": {"E2": {}}
+			}}
+		}`,
+		S{Recurse: map[string]S{"E": {
+			Recurse: map[string]S{
+				"E2": { /* empty */ },
+			},
+		}}})
+	s.TestOK(t, "null_level2",
+		`{
+			"id": "root",
+			"recurse": null
+		}`,
+		S{ID: "root", Recurse: nil})
+	s.TestOK(t, "empty_level2",
+		`{
+			"id": "root",
+			"recurse": {}
+		}`,
+		S{ID: "root", Recurse: map[string]S{}})
+	s.TestOK(t, "null_level3",
+		`{
+			"id": "root",
+			"recurse": {"L2": {
+				"id":"level2",
+				"recurse": null
+			}}
+		}`,
+		S{ID: "root", Recurse: map[string]S{
+			"L2": {
+				ID: "level2", Recurse: nil,
+			},
+		}})
+	s.TestOK(t, "empty_level3",
+		`{
+			"id": "root",
+			"recurse": {"L2": {
+				"id":"level2",
+				"recurse": {"L3": {}}
+			}}
+		}`,
+		S{ID: "root", Recurse: map[string]S{
+			"L2": {
+				ID: "level2", Recurse: map[string]S{
+					"L3": { /* empty */ },
+				},
+			},
+		}})
+	s.TestOK(t, "3_level_unknown_field",
+		`{
+			"recurse": {"L2": {
+				"recurse": {"L3": {
+					"unknown":["okay"]
+				}}
+			}}
+		}`,
+		S{Recurse: map[string]S{
+			"L2": {
+				Recurse: map[string]S{
+					"L3": { /* empty */ },
+				},
+			},
+		}})
+	s.TestOK(t, "3_level_upper_case_field_names",
+		`{
+			"RECURSE": {"L2": {
+				"RECURSE": {"L3": {
+					"ID": "level3"
+				}},
+				"ID": "level2"
+			}},
+			"ID": "root"
+		}`,
+		S{ID: "root", Recurse: map[string]S{
+			"L2": {
+				ID: "level2", Recurse: map[string]S{
+					"L3": {ID: "level3"},
+				},
+			},
+		}})
+
+	s.TestOKPrepare(t, "overwrite", `{"name":"Root", "recurse":{"L2": {"name": "L2"}}}`,
+		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
+		S{
+			ID: "root", Name: "Root", Recurse: map[string]S{
+				"L2": {
+					Name: "L2", Recurse: map[string]S(nil),
+				},
+			},
+		})
+
+	s.TestOKPrepare(t, "overwrite_null_level2", `{"name":"Root", "recurse":null}`,
+		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
+		S{ID: "root", Name: "Root", Recurse: nil})
+
+	s.TestOKPrepare(t, "overwrite_empty_level2", `{"name":"Root", "recurse":{"L2": {}}}`,
+		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
+		S{ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }}})
+
+	s.TestOKPrepare(t, "overwrite_unknown_field_level2",
+		`{"name":"Root", "recurse":{"L2": {"fuzz":"inexistent"}}}`,
+		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
+		S{ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }}})
+
+	s.testErr(t, "wrong_type_level2", `{"id":"root","recurse":[]}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 23})
+	s.testErr(t, "wrong_type_level3",
+		`{"id":"root","recurse":{"L2": {"id":"2","recurse":"x"}}}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 50})
+	s.testErr(t, "int", `1`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "string", `"text"`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+}
+
 func TestDecodeStructErrUknownField(t *testing.T) {
 	type S struct {
 		Foo int    `json:"foo"`
