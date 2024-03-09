@@ -718,7 +718,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					v := tokens[ti].Type == jscan.TokenTypeTrue
-					**(**interface{})(unsafe.Pointer(&p)) = v
+					*(*any)(p) = v
 				case ExpectTypeBool:
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
@@ -757,7 +757,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					**(**interface{})(unsafe.Pointer(&p)) = v
+					*(*any)(p) = v
 
 				case ExpectTypeUint:
 					if s[tokens[ti].Index] == '-' {
@@ -1021,7 +1021,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					**(**interface{})(unsafe.Pointer(&p)) = v
+					*(*any)(p) = v
 
 				case ExpectTypeFloat32:
 					p := unsafe.Pointer(
@@ -1071,7 +1071,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						return true
 					}
 				case ExpectTypeAny:
-					**(**interface{})(unsafe.Pointer(&p)) = unescape.Valid[S, string](
+					*(*any)(p) = unescape.Valid[S, string](
 						s[tokens[ti].Index+1 : tokens[ti].End-1],
 					)
 				case ExpectTypeStr:
@@ -1447,7 +1447,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					}
-					**(**interface{})(unsafe.Pointer(&p)) = v
+					*(*any)(p) = v
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END
 
@@ -2337,7 +2337,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					p := unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
-					**(**interface{})(unsafe.Pointer(&p)) = v
+					*(*any)(p) = v
 					ti = len(tokens) - len(tail)
 					goto ON_VAL_END
 
