@@ -1485,7 +1485,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
 							emptySlice.Data = mallocgc(
-								elementSize, d.stackExp[si+1].Typ, true,
+								elementSize, d.stackExp[si].Typ, true,
 							)
 						}
 						*(*sliceHeader)(p) = emptySlice
@@ -1538,7 +1538,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
 							emptySlice.Data = mallocgc(
-								elementSize, d.stackExp[recursiveFrame].Typ, true,
+								elementSize, d.stackExp[si].Typ, true,
 							)
 						}
 						*(*sliceHeader)(p) = emptySlice
