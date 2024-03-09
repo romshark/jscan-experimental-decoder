@@ -1484,9 +1484,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// Allocate empty slice
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
-							emptySlice.Data = mallocgc(
-								elementSize, d.stackExp[si].Typ, true,
-							)
+							emptySlice.Data = newarray(d.stackExp[si+1].Typ, elems)
 						}
 						*(*sliceHeader)(p) = emptySlice
 						ti += 2
@@ -1497,9 +1495,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
 						sh := sliceHeader{Len: elems, Cap: elems}
 						if elementSize > 0 {
-							sh.Data = mallocgc(
-								elems*elementSize, d.stackExp[si].Typ, true,
-							)
+							sh.Data = newarray(d.stackExp[si+1].Typ, elems)
 							if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
 								// Must copy existing data bzecause it's not guarenteed
 								// that the existing data will be fully overwritten.
@@ -1537,8 +1533,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// Allocate empty slice
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
-							emptySlice.Data = mallocgc(
-								elementSize, d.stackExp[si].Typ, true,
+							emptySlice.Data = newarray(
+								d.stackExp[recursiveFrame].Typ, elems,
 							)
 						}
 						*(*sliceHeader)(p) = emptySlice
@@ -1553,7 +1549,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					var dp unsafe.Pointer
 					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
 						sh := sliceHeader{
-							Data: mallocgc(elems*elementSize, d.stackExp[si].Typ, true),
+							Data: newarray(d.stackExp[recursiveFrame].Typ, elems),
 							Len:  elems,
 							Cap:  elems,
 						}
@@ -3109,6 +3105,9 @@ var emptyStructAddr = unsafe.Pointer(&struct{}{})
 
 //go:linkname noescape reflect.noescape
 func noescape(p unsafe.Pointer) unsafe.Pointer
+
+//go:linkname newarray runtime.newarray
+func newarray(typ *typ, n uintptr) unsafe.Pointer
 
 //go:linkname mallocgc runtime.mallocgc
 func mallocgc(size uintptr, typ *typ, needzero bool) unsafe.Pointer
