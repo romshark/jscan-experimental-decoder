@@ -1500,19 +1500,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sh.Data = mallocgc(
 								elems*elementSize, d.stackExp[si].Typ, true,
 							)
+							if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
+								// Must copy existing data bzecause it's not guarenteed
+								// that the existing data will be fully overwritten.
+								typedslicecopy(
+									d.stackExp[si+1].Typ,
+									sh.Data, int(elems),
+									h.Data, int(h.Len),
+								)
+							}
 						} else {
 							sh.Data = emptyStructAddr
 						}
 
-						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
-							// Must copy existing data bzecause it's not guarenteed
-							// that the existing data will be fully overwritten.
-							typedslicecopy(
-								d.stackExp[si+1].Typ,
-								sh.Data, int(elems),
-								h.Data, int(h.Len),
-							)
-						}
 						*(*sliceHeader)(p) = sh
 						dp = sh.Data
 					} else {
