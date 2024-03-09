@@ -5,7 +5,6 @@ import (
 	"encoding"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"reflect"
 	"strconv"
@@ -406,8 +405,11 @@ type stackFrame[S []byte | string] struct {
 	// RType is relevant to JSONUnmarshaler frames only.
 	RType reflect.Type
 
-	// MapType and MapValueType are relevant to map frames only.
-	MapType, MapValueType *typ
+	// Typ is relevant to maps and slices only
+	Typ *typ
+
+	// MapValueType is relevant to map frames only.
+	MapValueType *typ
 
 	// Size defines the number of bytes the data would occupy in memory.
 	// Size caches reflect.Type.Size() for faster access.
@@ -600,489 +602,6 @@ func (d *Decoder[S, T]) init() {
 	}
 }
 
-// appendTypeToStack will recursively flat-append stack frames recursing into t.
-func appendTypeToStack[S []byte | string](
-	stack []stackFrame[S], t reflect.Type, options *InitOptions,
-) ([]stackFrame[S], error) {
-	if t == nil {
-		return append(stack, stackFrame[S]{
-			Type:             ExpectTypeAny,
-			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
-			ParentFrameIndex: noParentFrame,
-		}), nil
-	} else if s := determineJSONUnmarshalerSupport(t); s != interfaceSupportNone {
-		return append(stack, stackFrame[S]{
-			Type:             ExpectTypeJSONUnmarshaler,
-			RType:            t,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		}), nil
-	} else if s := determineTextUnmarshalerSupport(t); s != interfaceSupportNone {
-		return append(stack, stackFrame[S]{
-			Type:             ExpectTypeTextUnmarshaler,
-			RType:            t,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		}), nil
-	}
-	switch t.Kind() {
-	case reflect.Interface:
-		if t.NumMethod() != 0 {
-			// TODO:
-			panic("not yet supported")
-		}
-		return append(stack, stackFrame[S]{
-			Type:             ExpectTypeAny,
-			Size:             unsafe.Sizeof(struct{ typ, dat uintptr }{}),
-			ParentFrameIndex: noParentFrame,
-		}), nil
-	case reflect.Array:
-		if t.Len() == 0 {
-			return append(stack, stackFrame[S]{
-				Size:             0,
-				Type:             ExpectTypeArrayLen0,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		}
-
-		parentIndex := uint32(len(stack))
-		stack = append(stack, stackFrame[S]{
-			Size:             t.Size(),
-			Type:             ExpectTypeArray,
-			ParentFrameIndex: noParentFrame,
-		})
-		newAtIndex := len(stack)
-		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
-			return nil, err
-		}
-
-		// Link array element to the array frame.
-		stack[newAtIndex].ParentFrameIndex = parentIndex
-		stack[newAtIndex].Cap = t.Len()
-
-	case reflect.Slice:
-		elem := t.Elem()
-		switch elem.Kind() {
-		case reflect.Struct:
-			if elem.Size() < 1 {
-				return append(stack, stackFrame[S]{
-					Size:             t.Size(),
-					Type:             ExpectTypeSliceEmptyStruct,
-					ParentFrameIndex: noParentFrame,
-				}), nil
-			}
-			// Check for recursion
-			for i := range stack {
-				if stack[i].RType == elem {
-					// Recursion of type stack[i] detected.
-					// Link recursive frame to the recursion frame.
-					stack[i].Type = ExpectTypeStructRecur
-					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
-					return append(stack, stackFrame[S]{
-						Type:             ExpectTypeSliceRecur,
-						Size:             t.Size(),
-						ParentFrameIndex: noParentFrame,
-						RecurFrame:       i,
-					}), nil
-				}
-			}
-		case reflect.Bool:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceBool,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.String:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceString,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Int:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceInt,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Int8:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceInt8,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Int16:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceInt16,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Int32:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceInt32,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Int64:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceInt64,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Uint:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceUint,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Uint8:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceUint8,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Uint16:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceUint16,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Uint32:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceUint32,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Uint64:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceUint64,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Float32:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceFloat32,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		case reflect.Float64:
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeSliceFloat64,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		}
-
-		parentIndex := uint32(len(stack))
-		stack = append(stack, stackFrame[S]{
-			Size:             t.Size(),
-			Type:             ExpectTypeSlice,
-			ParentFrameIndex: noParentFrame,
-		})
-		newAtIndex := len(stack)
-		var err error
-		if stack, err = appendTypeToStack(stack, t.Elem(), options); err != nil {
-			return nil, err
-		}
-
-		// Link slice element to the slice frame.
-		stack[newAtIndex].ParentFrameIndex = parentIndex
-
-	case reflect.Map:
-		parentIndex := uint32(len(stack))
-		elem := t.Elem()
-		if elem.Kind() == reflect.Struct && elem.Size() > 0 {
-			// Check for recursion
-			for i := range stack {
-				if stack[i].RType == elem {
-					// Recursion of type stack[i] detected.
-					// Link recursive frame to the recursion frame.
-					stack[i].Type = ExpectTypeStructRecur
-					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
-					stack = append(stack, stackFrame[S]{
-						Type:                   ExpectTypeMapRecur,
-						Size:                   t.Size(),
-						MapType:                getTyp(t),
-						MapValueType:           getTyp(t.Elem()),
-						MapCanUseAssignFaststr: canUseAssignFaststr(t),
-						ParentFrameIndex:       noParentFrame,
-						RecurFrame:             i,
-					})
-					{
-						newAtIndex := len(stack)
-						var err error
-						stack, err = appendTypeToStack(stack, t.Key(), options)
-						if err != nil {
-							return nil, err
-						}
-						// Link map key to the map frame.
-						stack[newAtIndex].ParentFrameIndex = parentIndex
-					}
-					return stack, nil
-				}
-			}
-		}
-
-		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
-			return append(stack, stackFrame[S]{
-				Type:             ExpectTypeMapStringString,
-				Size:             t.Size(),
-				ParentFrameIndex: noParentFrame,
-				RType:            t,
-			}), nil
-		}
-
-		stack = append(stack, stackFrame[S]{
-			Type:                   ExpectTypeMap,
-			Size:                   t.Size(),
-			MapType:                getTyp(t),
-			MapValueType:           getTyp(t.Elem()),
-			MapCanUseAssignFaststr: canUseAssignFaststr(t),
-			ParentFrameIndex:       noParentFrame,
-			RType:                  t,
-		})
-		{
-			newAtIndex := len(stack)
-			var err error
-			if stack, err = appendTypeToStack(stack, t.Key(), options); err != nil {
-				return nil, err
-			}
-			// Link map key to the map frame.
-			stack[newAtIndex].ParentFrameIndex = parentIndex
-		}
-		{
-			newAtIndex := len(stack)
-			var err error
-			if stack, err = appendTypeToStack(stack, elem, options); err != nil {
-				return nil, err
-			}
-			// Link map value to the map frame.
-			stack[newAtIndex].ParentFrameIndex = parentIndex
-		}
-
-	case reflect.Struct:
-		parentIndex := uint32(len(stack))
-		numFields := t.NumField()
-		if numFields == 0 {
-			return append(stack, stackFrame[S]{
-				Size:             t.Size(),
-				Type:             ExpectTypeEmptyStruct,
-				ParentFrameIndex: noParentFrame,
-			}), nil
-		}
-		stack = append(stack, stackFrame[S]{
-			Fields:           make([]fieldStackFrame, 0, numFields),
-			Size:             t.Size(),
-			Type:             ExpectTypeStruct,
-			RType:            t,
-			ParentFrameIndex: noParentFrame,
-		})
-
-		for i := 0; i < numFields; i++ {
-			f := t.Field(i)
-			name := f.Name
-			optionString := false
-			if jsonTag := f.Tag.Get("json"); jsonTag != "" {
-				name = jsonTag
-				if i := strings.IndexByte(jsonTag, ','); i != -1 {
-					name = jsonTag[:i]
-					optionName := jsonTag[i+1:]
-					optionString = optionName == "string"
-				}
-				switch name {
-				case "":
-					// Either there was no tag or no name specified in it.
-					name = f.Name
-				case "-":
-					// Ignore this field.
-					continue
-				}
-			}
-
-			newAtIndex := uint32(len(stack))
-			var err error
-			stack, err = appendTypeToStack(stack, f.Type, options)
-			if err != nil {
-				return nil, err
-			}
-			stack[parentIndex].Fields = append(
-				stack[parentIndex].Fields,
-				fieldStackFrame{
-					Name:       name,
-					FrameIndex: newAtIndex,
-				},
-			)
-
-			// Assign static offset
-			stack[newAtIndex].Offset = f.Offset
-
-			// Link the field frame to the parent struct frame.
-			stack[newAtIndex].ParentFrameIndex = parentIndex
-
-			if optionString {
-				switch stack[newAtIndex].Type {
-				case ExpectTypeStr:
-					stack[newAtIndex].Type = ExpectTypeStrString
-				case ExpectTypeBool:
-					stack[newAtIndex].Type = ExpectTypeBoolString
-				case ExpectTypeFloat32:
-					stack[newAtIndex].Type = ExpectTypeFloat32String
-				case ExpectTypeFloat64:
-					stack[newAtIndex].Type = ExpectTypeFloat64String
-				case ExpectTypeInt:
-					stack[newAtIndex].Type = ExpectTypeIntString
-				case ExpectTypeInt8:
-					stack[newAtIndex].Type = ExpectTypeInt8String
-				case ExpectTypeInt16:
-					stack[newAtIndex].Type = ExpectTypeInt16String
-				case ExpectTypeInt32:
-					stack[newAtIndex].Type = ExpectTypeInt32String
-				case ExpectTypeInt64:
-					stack[newAtIndex].Type = ExpectTypeInt64String
-				case ExpectTypeUint:
-					stack[newAtIndex].Type = ExpectTypeUintString
-				case ExpectTypeUint8:
-					stack[newAtIndex].Type = ExpectTypeUint8String
-				case ExpectTypeUint16:
-					stack[newAtIndex].Type = ExpectTypeUint16String
-				case ExpectTypeUint32:
-					stack[newAtIndex].Type = ExpectTypeUint32String
-				case ExpectTypeUint64:
-					stack[newAtIndex].Type = ExpectTypeUint64String
-				default:
-					// Using tag option `string` on an unsupported type
-					if options.DisallowStringTagOptOnUnsupportedTypes {
-						return nil, ErrStringTagOptionOnUnsupportedType
-					}
-				}
-			}
-		}
-
-	case reflect.Bool:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeBool,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.String:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeStr,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Int:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeInt,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Int8:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeInt8,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Int16:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeInt16,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Int32:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeInt32,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Int64:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeInt64,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Uint:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeUint,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Uint8:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeUint8,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Uint16:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeUint16,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Uint32:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeUint32,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Uint64:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeUint64,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Float32:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeFloat32,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Float64:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeFloat64,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-	case reflect.Pointer:
-		parentIndex := uint32(len(stack))
-
-		elem := t.Elem()
-		if elem.Kind() == reflect.Struct && elem.Size() > 0 {
-			// Check for recursion
-			for i := range stack {
-				if stack[i].RType == elem {
-					// Recursion of type stack[i] detected.
-					// Link recursive frame to the recursion frame.
-					stack[i].Type = ExpectTypeStructRecur
-					stack[i].RecursionStack = make([]recursionStackFrame, 0, 64)
-					return append(stack, stackFrame[S]{
-						Type:             ExpectTypePtrRecur,
-						Size:             t.Size(),
-						ParentFrameIndex: noParentFrame,
-						RecurFrame:       i,
-					}), nil
-				}
-			}
-		}
-
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypePtr,
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
-		newAtIndex := len(stack)
-		var err error
-
-		if stack, err = appendTypeToStack(stack, elem, options); err != nil {
-			return nil, err
-		}
-		stack[newAtIndex].ParentFrameIndex = parentIndex
-
-	default:
-		return nil, fmt.Errorf("unsupported type: %v", t)
-	}
-	return stack, nil
-}
-
 var (
 	tpJSONUnmarshaler = reflect.TypeOf((*json.Unmarshaler)(nil)).Elem()
 	tpTextUnmarshaler = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
@@ -1182,7 +701,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				if d.stackExp[si].Size == 0 {
 					*(*unsafe.Pointer)(p) = emptyStructAddr
 				} else {
-					dp := allocate(d.stackExp[si].Size)
+					dp := mallocgc(d.stackExp[si].Size, d.stackExp[si].Typ, true)
 					d.stackExp[si].Dest = dp
 					*(*unsafe.Pointer)(p) = dp
 				}
@@ -1965,7 +1484,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// Allocate empty slice
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
-							emptySlice.Data = allocate(elementSize)
+							emptySlice.Data = mallocgc(
+								elementSize, d.stackExp[si+1].Typ, true,
+							)
 						}
 						*(*sliceHeader)(p) = emptySlice
 						ti += 2
@@ -1974,18 +1495,24 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					var dp unsafe.Pointer
 					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
-						sh := sliceHeader{Data: emptyStructAddr, Len: elems, Cap: elems}
-						allocated := make([]byte, elems*elementSize)
-						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
-							// Must copy existing data because it's not guarenteed
-							// that the existing data will be fully overwritten.
-							copy(allocated, *(*[]byte)(unsafe.Pointer(&sliceHeader{
-								Data: h.Data,
-								Len:  h.Len * elementSize,
-								Cap:  h.Cap * elementSize,
-							})))
+						sh := sliceHeader{Len: elems, Cap: elems}
+						if elementSize > 0 {
+							sh.Data = mallocgc(
+								elems*elementSize, d.stackExp[si].Typ, true,
+							)
+						} else {
+							sh.Data = emptyStructAddr
 						}
-						sh.Data = unsafe.Pointer(&allocated[0])
+
+						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
+							// Must copy existing data bzecause it's not guarenteed
+							// that the existing data will be fully overwritten.
+							typedslicecopy(
+								d.stackExp[si+1].Typ,
+								sh.Data, int(elems),
+								h.Data, int(h.Len),
+							)
+						}
 						*(*sliceHeader)(p) = sh
 						dp = sh.Data
 					} else {
@@ -2010,7 +1537,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// Allocate empty slice
 						emptySlice := sliceHeader{Data: emptyStructAddr, Len: 0, Cap: 0}
 						if elementSize > 0 {
-							emptySlice.Data = allocate(elementSize)
+							emptySlice.Data = mallocgc(
+								elementSize, d.stackExp[recursiveFrame].Typ, true,
+							)
 						}
 						*(*sliceHeader)(p) = emptySlice
 						ti += 2
@@ -2023,18 +1552,23 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					var dp unsafe.Pointer
 					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
-						sh := sliceHeader{Data: emptyStructAddr, Len: elems, Cap: elems}
-						allocated := make([]byte, elems*elementSize)
+						sh := sliceHeader{Len: elems, Cap: elems}
+						if elementSize > 0 {
+							sh.Data = mallocgc(
+								elems*elementSize, d.stackExp[si].Typ, true,
+							)
+						} else {
+							sh.Data = emptyStructAddr
+						}
 						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
 							// Must copy existing data because it's not guarenteed
 							// that the existing data will be fully overwritten.
-							copy(allocated, *(*[]byte)(unsafe.Pointer(&sliceHeader{
-								Data: h.Data,
-								Len:  h.Len * elementSize,
-								Cap:  h.Cap * elementSize,
-							})))
+							typedslicecopy(
+								d.stackExp[si+1].Typ,
+								sh.Data, int(elems),
+								h.Data, int(h.Len),
+							)
 						}
-						sh.Data = unsafe.Pointer(&allocated[0])
 						*(*sliceHeader)(p) = sh
 						dp = sh.Data
 					} else {
@@ -2830,7 +2364,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					if *(*unsafe.Pointer)(p) != nil {
 						dp = *(*unsafe.Pointer)(p)
 					} else {
-						dp = allocate(d.stackExp[si].Size)
+						dp = mallocgc(d.stackExp[si].Size, d.stackExp[si].Typ, true)
 						*(*unsafe.Pointer)(p) = dp
 					}
 					d.stackExp[si].Dest = dp
@@ -2862,7 +2396,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					if *(*unsafe.Pointer)(p) == nil {
 						// Map not yet initialized, initialize map.
 						*(*unsafe.Pointer)(p) = makemap(
-							d.stackExp[si].MapType, tokens[ti].Elements,
+							d.stackExp[si].Typ, tokens[ti].Elements,
 						)
 					}
 					if tokens[ti].Elements == 0 {
@@ -2878,7 +2412,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					if *(*unsafe.Pointer)(p) == nil {
 						// Map not yet initialized, initialize map.
 						*(*unsafe.Pointer)(p) = makemap(
-							d.stackExp[si].MapType, tokens[ti].Elements,
+							d.stackExp[si].Typ, tokens[ti].Elements,
 						)
 					}
 					if tokens[ti].Elements == 0 {
@@ -3014,7 +2548,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					key := s[tokens[ti].Index+1 : tokens[ti].End-1]
 
-					typMap := d.stackExp[si].MapType
+					typMap := d.stackExp[si].Typ
 					typVal := d.stackExp[si].MapValueType
 					pMap := *(*unsafe.Pointer)(unsafe.Pointer(
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
@@ -3449,8 +2983,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	return ErrorDecode{}
 }
 
-func allocate(n uintptr) unsafe.Pointer { return unsafe.Pointer(&make([]byte, n)[0]) }
-
 type sliceHeader struct {
 	Data     unsafe.Pointer
 	Len, Cap uintptr
@@ -3581,6 +3113,15 @@ var emptyStructAddr = unsafe.Pointer(&struct{}{})
 //go:linkname noescape reflect.noescape
 func noescape(p unsafe.Pointer) unsafe.Pointer
 
+//go:linkname mallocgc runtime.mallocgc
+func mallocgc(size uintptr, typ *typ, needzero bool) unsafe.Pointer
+
+//go:linkname typedslicecopy runtime.typedslicecopy
+//go:nosplit
+func typedslicecopy(
+	elemTyp *typ, dstPtr unsafe.Pointer, dstLen int, srcPtr unsafe.Pointer, srcLen int,
+) int
+
 //go:linkname typedmemclr runtime.typedmemclr
 //go:noescape
 func typedmemclr(typ *typ, dst unsafe.Pointer)
@@ -3606,10 +3147,6 @@ type typ struct{}
 type emptyInterface struct {
 	_   *typ
 	ptr unsafe.Pointer
-}
-
-func getTyp(t reflect.Type) *typ {
-	return (*typ)(((*emptyInterface)(unsafe.Pointer(&t))).ptr)
 }
 
 func canUseAssignFaststr(mapType reflect.Type) bool {

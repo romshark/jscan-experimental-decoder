@@ -105,8 +105,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: string(""),
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
+					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -115,8 +116,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: int(0),
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -126,6 +128,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeEmptyStruct,
+					Typ:              getTyp(reflect.TypeOf(struct{}{})),
 					Size:             reflect.TypeOf(struct{}{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
@@ -135,23 +138,26 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: S1{},
 			ExpectStack: []stackFrame[string]{
 				{ // S1
+					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(S1{})),
+					RType: reflect.TypeOf(S1{}),
+					Size:  reflect.TypeOf(S1{}).Size(),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "foo"},
 						{FrameIndex: 2, Name: "bar"},
 					},
-					Size:             reflect.TypeOf(S1{}).Size(),
-					Type:             ExpectTypeStruct,
-					RType:            reflect.TypeOf(S1{}),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // S1.Foo
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // S1.Bar
-					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
+					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 					Offset:           reflect.TypeOf(S1{}).Field(1).Offset,
 				},
@@ -161,46 +167,52 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: S2{},
 			ExpectStack: []stackFrame[string]{
 				{ // S2
+					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(S2{})),
+					RType: reflect.TypeOf(S2{}),
+					Size:  reflect.TypeOf(S2{}).Size(),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "S1"},
 						{FrameIndex: 4, Name: "Bar"},
 						{FrameIndex: 5, Name: "bazz"},
 					},
-					Size:             reflect.TypeOf(S2{}).Size(),
-					Type:             ExpectTypeStruct,
-					RType:            reflect.TypeOf(S2{}),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // S2.S1
+					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(S1{})),
+					RType: reflect.TypeOf(S1{}),
+					Size:  reflect.TypeOf(S1{}).Size(),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "foo"},
 						{FrameIndex: 3, Name: "bar"},
 					},
-					Size:             reflect.TypeOf(S1{}).Size(),
-					Type:             ExpectTypeStruct,
-					RType:            reflect.TypeOf(S1{}),
 					ParentFrameIndex: 0,
 				},
 				{ // S2.S1.Foo
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 1,
 				},
 				{ // S2.S1.Bar
-					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
+					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 1,
 					Offset:           reflect.TypeOf(S1{}).Field(1).Offset,
 				},
 				{ // S2.Bar
-					Size:             reflect.TypeOf([]string{}).Size(),
 					Type:             ExpectTypeSliceString,
+					Typ:              getTyp(reflect.TypeOf([]string(nil))),
+					Size:             reflect.TypeOf([]string(nil)).Size(),
 					ParentFrameIndex: 0,
 					Offset:           reflect.TypeOf(S2{}).Field(1).Offset,
 				},
 				{ // S2.Bazz
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 					Offset:           reflect.TypeOf(S2{}).Field(3).Offset,
 				},
@@ -210,8 +222,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []bool{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]bool{}).Size(),
 					Type:             ExpectTypeSliceBool,
+					Typ:              getTyp(reflect.TypeOf([]bool(nil))),
+					Size:             reflect.TypeOf([]bool(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -220,8 +233,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []string{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]string{}).Size(),
 					Type:             ExpectTypeSliceString,
+					Typ:              getTyp(reflect.TypeOf([]string(nil))),
+					Size:             reflect.TypeOf([]string(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -230,8 +244,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []int{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]int{}).Size(),
 					Type:             ExpectTypeSliceInt,
+					Typ:              getTyp(reflect.TypeOf([]int(nil))),
+					Size:             reflect.TypeOf([]int(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -240,8 +255,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []int8{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]int8{}).Size(),
 					Type:             ExpectTypeSliceInt8,
+					Typ:              getTyp(reflect.TypeOf([]int8(nil))),
+					Size:             reflect.TypeOf([]int8(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -250,8 +266,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []int16{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]int16{}).Size(),
 					Type:             ExpectTypeSliceInt16,
+					Typ:              getTyp(reflect.TypeOf([]int16(nil))),
+					Size:             reflect.TypeOf([]int16(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -260,8 +277,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []int32{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]int32{}).Size(),
 					Type:             ExpectTypeSliceInt32,
+					Typ:              getTyp(reflect.TypeOf([]int32(nil))),
+					Size:             reflect.TypeOf([]int32(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -270,8 +288,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []int64{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]int64{}).Size(),
 					Type:             ExpectTypeSliceInt64,
+					Typ:              getTyp(reflect.TypeOf([]int64(nil))),
+					Size:             reflect.TypeOf([]int64(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -280,8 +299,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []uint{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]uint{}).Size(),
 					Type:             ExpectTypeSliceUint,
+					Typ:              getTyp(reflect.TypeOf([]uint(nil))),
+					Size:             reflect.TypeOf([]uint(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -290,8 +310,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []uint8{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]uint8{}).Size(),
 					Type:             ExpectTypeSliceUint8,
+					Typ:              getTyp(reflect.TypeOf([]uint8(nil))),
+					Size:             reflect.TypeOf([]uint8(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -300,8 +321,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []uint16{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]uint16{}).Size(),
 					Type:             ExpectTypeSliceUint16,
+					Typ:              getTyp(reflect.TypeOf([]uint16(nil))),
+					Size:             reflect.TypeOf([]uint16(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -310,8 +332,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []uint32{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]uint32{}).Size(),
 					Type:             ExpectTypeSliceUint32,
+					Typ:              getTyp(reflect.TypeOf([]uint32(nil))),
+					Size:             reflect.TypeOf([]uint32(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -320,8 +343,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []uint64{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]uint64{}).Size(),
 					Type:             ExpectTypeSliceUint64,
+					Typ:              getTyp(reflect.TypeOf([]uint64(nil))),
+					Size:             reflect.TypeOf([]uint64(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -330,8 +354,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []byte{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([]byte{}).Size(),
 					Type:             ExpectTypeSliceUint8,
+					Typ:              getTyp(reflect.TypeOf([]byte(nil))),
+					Size:             reflect.TypeOf([]byte(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -340,18 +365,21 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: [][][]string{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([][][]string{}).Size(),
 					Type:             ExpectTypeSlice,
+					Typ:              getTyp(reflect.TypeOf([][][]string(nil))),
+					Size:             reflect.TypeOf([][][]string(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
-					Size:             reflect.TypeOf([][]string{}).Size(),
 					Type:             ExpectTypeSlice,
+					Typ:              getTyp(reflect.TypeOf([][]string(nil))),
+					Size:             reflect.TypeOf([][]string(nil)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{
-					Size:             reflect.TypeOf([]string{}).Size(),
 					Type:             ExpectTypeSliceString,
+					Typ:              getTyp(reflect.TypeOf([]string(nil))),
+					Size:             reflect.TypeOf([]string(nil)).Size(),
 					ParentFrameIndex: 1,
 				},
 			},
@@ -360,28 +388,32 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []S1{},
 			ExpectStack: []stackFrame[string]{
 				{ // []
-					Size:             reflect.TypeOf([]S1{}).Size(),
 					Type:             ExpectTypeSlice,
+					Typ:              getTyp(reflect.TypeOf([]S1(nil))),
+					Size:             reflect.TypeOf([]S1(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // []S1
+					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(S1{})),
+					RType: reflect.TypeOf(S1{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "foo"},
 						{FrameIndex: 3, Name: "bar"},
 					},
 					Size:             reflect.TypeOf(S1{}).Size(),
-					Type:             ExpectTypeStruct,
-					RType:            reflect.TypeOf(S1{}),
 					ParentFrameIndex: 0,
 				},
 				{ // []S1.Foo
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 1,
 				},
 				{ // []S1.Bar
-					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
+					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 1,
 					Offset:           8,
 				},
@@ -392,6 +424,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeArrayLen0,
+					Typ:              getTyp(reflect.TypeOf([0]int{})),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -401,6 +434,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeArrayLen0,
+					Typ:              getTyp(reflect.TypeOf([0][0]string{})),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -410,11 +444,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeArray,
+					Typ:              getTyp(reflect.TypeOf([3][0]string{})),
 					Size:             reflect.TypeOf([3][0]string{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:             ExpectTypeArrayLen0,
+					Typ:              getTyp(reflect.TypeOf([0]string{})),
 					Cap:              3,
 					ParentFrameIndex: 0,
 				},
@@ -424,13 +460,15 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: [4]int{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Size:             reflect.TypeOf([4]int{}).Size(),
 					Type:             ExpectTypeArray,
+					Typ:              getTyp(reflect.TypeOf([4]int{})),
+					Size:             reflect.TypeOf([4]int{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 					Cap:              4,
 				},
@@ -441,8 +479,9 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeMapStringString,
-					RType:            reflect.TypeOf(map[string]string{}),
-					Size:             reflect.TypeOf(map[string]string{}).Size(),
+					Typ:              getTyp(reflect.TypeOf(map[string]string(nil))),
+					RType:            reflect.TypeOf(map[string]string(nil)),
+					Size:             reflect.TypeOf(map[string]string(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 			},
@@ -452,15 +491,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type: ExpectTypeMap,
+					Typ:  getTyp(reflect.TypeOf(map[string]struct{ F [256]byte }(nil))),
 					RType: reflect.TypeOf(
-						map[string]struct{ F [256]byte }{},
+						map[string]struct{ F [256]byte }(nil),
 					),
 					Size: reflect.TypeOf(
-						map[string]struct{ F [256]byte }{},
+						map[string]struct{ F [256]byte }(nil),
 					).Size(),
-					MapType: getTyp(
-						reflect.TypeOf(map[string]struct{ F [256]byte }{}),
-					),
 					MapValueType: getTyp(
 						reflect.TypeOf(struct{ F [256]byte }{}),
 					),
@@ -469,11 +506,13 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // Key frame
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value frame
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(struct{ F [256]byte }{})),
 					RType: reflect.TypeOf(struct{ F [256]byte }{}),
 					Size:  reflect.TypeOf(struct{ F [256]byte }{}).Size(),
 					Fields: []fieldStackFrame{
@@ -483,11 +522,13 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // Value frame
 					Type:             ExpectTypeArray,
+					Typ:              getTyp(reflect.TypeOf([256]byte{})),
 					Size:             reflect.TypeOf([256]byte{}).Size(),
 					ParentFrameIndex: 2,
 				},
 				{ // Value frame
 					Type:             ExpectTypeUint8,
+					Typ:              getTyp(reflect.TypeOf(byte(0))),
 					Size:             reflect.TypeOf(byte(0)).Size(),
 					Cap:              256,
 					ParentFrameIndex: 3,
@@ -498,24 +539,30 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[testImplTextUnmarshaler]int{},
 			ExpectStack: []stackFrame[string]{
 				{
-					RType: reflect.TypeOf(map[testImplTextUnmarshaler]int{}),
-					Type:  ExpectTypeMap,
-					Size:  reflect.TypeOf(map[testImplTextUnmarshaler]int{}).Size(),
-					MapType: getTyp(
-						reflect.TypeOf(map[testImplTextUnmarshaler]string{}),
+					Type: ExpectTypeMap,
+					Typ: getTyp(
+						reflect.TypeOf(map[testImplTextUnmarshaler]string(nil)),
 					),
+					RType: reflect.TypeOf(
+						map[testImplTextUnmarshaler]int(nil),
+					),
+					Size: reflect.TypeOf(
+						map[testImplTextUnmarshaler]int(nil),
+					).Size(),
 					MapValueType:           getTyp(reflect.TypeOf(string(""))),
 					MapCanUseAssignFaststr: false, // Key not a string
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
-					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
 					Type:             ExpectTypeTextUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplTextUnmarshaler{})),
+					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
 					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -525,37 +572,41 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[int]S1{},
 			ExpectStack: []stackFrame[string]{
 				{
-					RType:                  reflect.TypeOf(map[int]S1{}),
-					Size:                   reflect.TypeOf(map[int]S1{}).Size(),
-					MapType:                getTyp(reflect.TypeOf(map[int]S1{})),
+					Type:                   ExpectTypeMap,
+					Typ:                    getTyp(reflect.TypeOf(map[int]S1(nil))),
+					RType:                  reflect.TypeOf(map[int]S1(nil)),
+					Size:                   reflect.TypeOf(map[int]S1(nil)).Size(),
 					MapValueType:           getTyp(reflect.TypeOf(S1{})),
 					MapCanUseAssignFaststr: false, // Non-string key type
-					Type:                   ExpectTypeMap,
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key frame
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // S1
+					Type: ExpectTypeStruct,
+					Typ:  getTyp(reflect.TypeOf(S1{})),
+					Size: reflect.TypeOf(S1{}).Size(),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 3, Name: "foo"},
 						{FrameIndex: 4, Name: "bar"},
 					},
-					Size:             reflect.TypeOf(S1{}).Size(),
-					Type:             ExpectTypeStruct,
 					RType:            reflect.TypeOf(S1{}),
 					ParentFrameIndex: 0,
 				},
 				{ // S1.Foo
-					Size:             reflect.TypeOf(int(0)).Size(),
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
+					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 2,
 				},
 				{ // S1.Bar
-					Size:             reflect.TypeOf(string("")).Size(),
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
+					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 2,
 					Offset:           reflect.TypeOf(S1{}).Field(1).Offset,
 				},
@@ -566,40 +617,47 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeMap,
-					RType: reflect.TypeOf(map[int]map[string]float32{}),
-					MapType: getTyp(
-						reflect.TypeOf(map[int]map[string]float32{}),
+					RType: reflect.TypeOf(map[int]map[string]float32(nil)),
+					Typ: getTyp(
+						reflect.TypeOf(map[int]map[string]float32(nil)),
 					),
 					MapValueType: getTyp(
-						reflect.TypeOf(map[string]float32{}),
+						reflect.TypeOf(map[string]float32(nil)),
 					),
 					MapCanUseAssignFaststr: false, // Non-string key type
 					Size: reflect.TypeOf(
-						map[int]map[string]float32{},
+						map[int]map[string]float32(nil),
 					).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
 					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{
-					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[string]float32{}),
-					MapType:                getTyp(reflect.TypeOf(map[string]float32{})),
+					Type:  ExpectTypeMap,
+					RType: reflect.TypeOf(map[string]float32(nil)),
+					Typ: getTyp(reflect.TypeOf(
+						map[string]float32(nil)),
+					),
 					MapValueType:           getTyp(reflect.TypeOf(float32(0))),
 					MapCanUseAssignFaststr: true, // Size of float32 is under 128 bytes.
-					Size:                   reflect.TypeOf(map[string]float32{}).Size(),
-					ParentFrameIndex:       0,
+					Size: reflect.TypeOf(
+						map[string]float32(nil),
+					).Size(),
+					ParentFrameIndex: 0,
 				},
 				{
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 2,
 				},
 				{
 					Type:             ExpectTypeFloat32,
+					Typ:              getTyp(reflect.TypeOf(float32(0))),
 					Size:             reflect.TypeOf(float32(0)).Size(),
 					ParentFrameIndex: 2,
 				},
@@ -610,20 +668,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[int8]int8{}),
-					MapType:                getTyp(reflect.TypeOf(map[int8]int8{})),
+					RType:                  reflect.TypeOf(map[int8]int8(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[int8]int8(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(int8(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[int8]int8{}).Size(),
+					Size:                   reflect.TypeOf(map[int8]int8(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeInt8,
+					Typ:              getTyp(reflect.TypeOf(int8(0))),
 					Size:             reflect.TypeOf(int8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeInt8,
+					Typ:              getTyp(reflect.TypeOf(int8(0))),
 					Size:             reflect.TypeOf(int8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -634,20 +694,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[int16]int16{}),
-					MapType:                getTyp(reflect.TypeOf(map[int16]int16{})),
+					RType:                  reflect.TypeOf(map[int16]int16(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[int16]int16(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(int16(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[int16]int16{}).Size(),
+					Size:                   reflect.TypeOf(map[int16]int16(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeInt16,
+					Typ:              getTyp(reflect.TypeOf(int16(0))),
 					Size:             reflect.TypeOf(int16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeInt16,
+					Typ:              getTyp(reflect.TypeOf(int16(0))),
 					Size:             reflect.TypeOf(int16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -658,20 +720,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[int32]int32{}),
-					MapType:                getTyp(reflect.TypeOf(map[int32]int32{})),
+					RType:                  reflect.TypeOf(map[int32]int32(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[int32]int32(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(int32(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[int32]int32{}).Size(),
+					Size:                   reflect.TypeOf(map[int32]int32(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeInt32,
+					Typ:              getTyp(reflect.TypeOf(int32(0))),
 					Size:             reflect.TypeOf(int32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeInt32,
+					Typ:              getTyp(reflect.TypeOf(int32(0))),
 					Size:             reflect.TypeOf(int32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -682,20 +746,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[int64]int64{}),
-					MapType:                getTyp(reflect.TypeOf(map[int64]int64{})),
+					RType:                  reflect.TypeOf(map[int64]int64(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[int64]int64(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(int64(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[int64]int64{}).Size(),
+					Size:                   reflect.TypeOf(map[int64]int64(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeInt64,
+					Typ:              getTyp(reflect.TypeOf(int64(0))),
 					Size:             reflect.TypeOf(int64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeInt64,
+					Typ:              getTyp(reflect.TypeOf(int64(0))),
 					Size:             reflect.TypeOf(int64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -706,20 +772,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[uint]uint{}),
-					MapType:                getTyp(reflect.TypeOf(map[uint]uint{})),
+					RType:                  reflect.TypeOf(map[uint]uint(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[uint]uint(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(uint(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[uint]uint{}).Size(),
+					Size:                   reflect.TypeOf(map[uint]uint(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeUint,
+					Typ:              getTyp(reflect.TypeOf(uint(0))),
 					Size:             reflect.TypeOf(uint(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeUint,
+					Typ:              getTyp(reflect.TypeOf(uint(0))),
 					Size:             reflect.TypeOf(uint(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -730,20 +798,22 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[uint8]uint8{}),
-					MapType:                getTyp(reflect.TypeOf(map[uint8]uint8{})),
+					RType:                  reflect.TypeOf(map[uint8]uint8(nil)),
+					Typ:                    getTyp(reflect.TypeOf(map[uint8]uint8(nil))),
 					MapValueType:           getTyp(reflect.TypeOf(uint8(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[uint8]uint8{}).Size(),
+					Size:                   reflect.TypeOf(map[uint8]uint8(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeUint8,
+					Typ:              getTyp(reflect.TypeOf(uint8(0))),
 					Size:             reflect.TypeOf(uint8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeUint8,
+					Typ:              getTyp(reflect.TypeOf(uint8(0))),
 					Size:             reflect.TypeOf(uint8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -753,21 +823,25 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[uint16]uint16{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[uint16]uint16{}),
-					MapType:                getTyp(reflect.TypeOf(map[uint16]uint16{})),
+					Type:  ExpectTypeMap,
+					RType: reflect.TypeOf(map[uint16]uint16(nil)),
+					Typ: getTyp(reflect.TypeOf(
+						map[uint16]uint16(nil)),
+					),
 					MapValueType:           getTyp(reflect.TypeOf(uint16(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[uint16]uint16{}).Size(),
+					Size:                   reflect.TypeOf(map[uint16]uint16(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeUint16,
+					Typ:              getTyp(reflect.TypeOf(uint16(0))),
 					Size:             reflect.TypeOf(uint16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeUint16,
+					Typ:              getTyp(reflect.TypeOf(uint16(0))),
 					Size:             reflect.TypeOf(uint16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -777,21 +851,25 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[uint32]uint32{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[uint32]uint32{}),
-					MapType:                getTyp(reflect.TypeOf(map[uint32]uint32{})),
+					Type:  ExpectTypeMap,
+					RType: reflect.TypeOf(map[uint32]uint32(nil)),
+					Typ: getTyp(reflect.TypeOf(
+						map[uint32]uint32(nil)),
+					),
 					MapValueType:           getTyp(reflect.TypeOf(uint32(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[uint32]uint32{}).Size(),
+					Size:                   reflect.TypeOf(map[uint32]uint32(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeUint32,
+					Typ:              getTyp(reflect.TypeOf(uint32(0))),
 					Size:             reflect.TypeOf(uint32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeUint32,
+					Typ:              getTyp(reflect.TypeOf(uint32(0))),
 					Size:             reflect.TypeOf(uint32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -801,21 +879,25 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: map[uint64]uint64{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:                   ExpectTypeMap,
-					RType:                  reflect.TypeOf(map[uint64]uint64{}),
-					MapType:                getTyp(reflect.TypeOf(map[uint64]uint64{})),
+					Type: ExpectTypeMap,
+					Typ: getTyp(reflect.TypeOf(
+						map[uint64]uint64(nil),
+					)),
+					RType:                  reflect.TypeOf(map[uint64]uint64(nil)),
 					MapValueType:           getTyp(reflect.TypeOf(uint64(0))),
 					MapCanUseAssignFaststr: false,
-					Size:                   reflect.TypeOf(map[uint64]uint64{}).Size(),
+					Size:                   reflect.TypeOf(map[uint64]uint64(nil)).Size(),
 					ParentFrameIndex:       noParentFrame,
 				},
 				{ // Key
 					Type:             ExpectTypeUint64,
+					Typ:              getTyp(reflect.TypeOf(uint64(0))),
 					Size:             reflect.TypeOf(uint64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // Value
 					Type:             ExpectTypeUint64,
+					Typ:              getTyp(reflect.TypeOf(uint64(0))),
 					Size:             reflect.TypeOf(uint64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -825,27 +907,29 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: S3{},
 			ExpectStack: []stackFrame[string]{
 				{ // S3
+					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(S3{})),
+					RType: reflect.TypeOf(S3{}),
+					Size:  reflect.TypeOf(S3{}).Size(),
 					Fields: []fieldStackFrame{
 						{Name: "Any", FrameIndex: 1},
 						{Name: "Map", FrameIndex: 2},
 						{Name: "Slice", FrameIndex: 5},
 					},
-					Type:             ExpectTypeStruct,
-					RType:            reflect.TypeOf(S3{}),
-					Size:             reflect.TypeOf(S3{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // S3.Any
 					Type:             ExpectTypeAny,
+					Typ:              getTyp(tpEmptyIface),
 					Size:             tpEmptyIface.Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS3.Field(0).Offset,
 				},
 				{ // S3.Map
 					Type:                   ExpectTypeMap,
-					Size:                   reflect.TypeOf(map[string]any{}).Size(),
-					RType:                  reflect.TypeOf(map[string]any{}),
-					MapType:                getTyp(reflect.TypeOf(map[string]any{})),
+					Typ:                    getTyp(reflect.TypeOf(map[string]any(nil))),
+					Size:                   reflect.TypeOf(map[string]any(nil)).Size(),
+					RType:                  reflect.TypeOf(map[string]any(nil)),
 					MapValueType:           getTyp(reflect.TypeOf(any(0))),
 					MapCanUseAssignFaststr: true,
 					ParentFrameIndex:       0,
@@ -853,23 +937,27 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // Key frame
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 2,
 				},
 				{ // Value frame
 					Type:             ExpectTypeAny,
+					Typ:              getTyp(tpEmptyIface),
 					Size:             tpEmptyIface.Size(),
 					ParentFrameIndex: 2,
 				},
 				{ // S3.Slice
-					Size:             reflect.TypeOf([]any{}).Size(),
 					Type:             ExpectTypeSlice,
+					Typ:              getTyp(reflect.TypeOf([]any(nil))),
+					Size:             reflect.TypeOf([]any(nil)).Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS3.Field(2).Offset,
 				},
 				{ // S3.Slice
-					Size:             tpEmptyIface.Size(),
 					Type:             ExpectTypeAny,
+					Typ:              getTyp(tpEmptyIface),
+					Size:             tpEmptyIface.Size(),
 					ParentFrameIndex: 5,
 				},
 			},
@@ -879,11 +967,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{ // *
 					Type:             ExpectTypePtr,
-					Size:             reflect.TypeOf(Ptr(int(0))).Size(),
+					Typ:              getTyp(reflect.TypeOf((*int)(nil))),
+					Size:             reflect.TypeOf((*int)(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // *int
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
 					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -894,16 +984,19 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{ // *
 					Type:             ExpectTypePtr,
-					Size:             reflect.TypeOf(Ptr(Ptr(int(0)))).Size(),
+					Typ:              getTyp(reflect.TypeOf((**int)(nil))),
+					Size:             reflect.TypeOf((**int)(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // **
 					Type:             ExpectTypePtr,
-					Size:             reflect.TypeOf(Ptr(int(0))).Size(),
+					Typ:              getTyp(reflect.TypeOf((*int)(nil))),
+					Size:             reflect.TypeOf(((*int)(nil))).Size(),
 					ParentFrameIndex: 0,
 				},
 				{ // **int
 					Type:             ExpectTypeInt,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
 					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 1,
 				},
@@ -914,6 +1007,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeJSONUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplJSONUnmarshaler{})),
 					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
 					ParentFrameIndex: noParentFrame,
@@ -925,6 +1019,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeJSONUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(&testImplTextUnmarshaler{})),
 					RType:            reflect.TypeOf(&testImplJSONUnmarshaler{}),
 					Size:             reflect.TypeOf(&testImplJSONUnmarshaler{}).Size(),
 					ParentFrameIndex: noParentFrame,
@@ -936,6 +1031,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeTextUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplTextUnmarshaler{})),
 					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
 					ParentFrameIndex: noParentFrame,
@@ -947,6 +1043,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeTextUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplTextUnmarshaler{})),
 					RType:            reflect.TypeOf(&testImplTextUnmarshaler{}),
 					Size:             reflect.TypeOf(&testImplTextUnmarshaler{}).Size(),
 					ParentFrameIndex: noParentFrame,
@@ -957,12 +1054,18 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []testImplJSONUnmarshaler{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:             ExpectTypeSlice,
-					Size:             reflect.TypeOf([]any{}).Size(),
+					Type: ExpectTypeSlice,
+					Typ: getTyp(reflect.TypeOf(
+						[]testImplJSONUnmarshaler(nil),
+					)),
+					Size: reflect.TypeOf(
+						[]testImplJSONUnmarshaler(nil),
+					).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:             ExpectTypeJSONUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplJSONUnmarshaler{})),
 					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
 					ParentFrameIndex: 0,
@@ -973,12 +1076,18 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: []testImplTextUnmarshaler{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:             ExpectTypeSlice,
-					Size:             reflect.TypeOf([]any{}).Size(),
+					Type: ExpectTypeSlice,
+					Typ: getTyp(reflect.TypeOf(
+						[]testImplTextUnmarshaler(nil)),
+					),
+					Size: reflect.TypeOf(
+						[]testImplTextUnmarshaler(nil),
+					).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:             ExpectTypeTextUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplTextUnmarshaler{})),
 					RType:            reflect.TypeOf(testImplTextUnmarshaler{}),
 					Size:             reflect.TypeOf(testImplTextUnmarshaler{}).Size(),
 					ParentFrameIndex: 0,
@@ -989,7 +1098,10 @@ func TestAppendTypeToStack(t *testing.T) {
 			Input: testImplUnmarshalerWithUnmarshalerFields{},
 			ExpectStack: []stackFrame[string]{
 				{
-					Type:  ExpectTypeJSONUnmarshaler,
+					Type: ExpectTypeJSONUnmarshaler,
+					Typ: getTyp(reflect.TypeOf(
+						testImplUnmarshalerWithUnmarshalerFields{},
+					)),
 					RType: reflect.TypeOf(testImplUnmarshalerWithUnmarshalerFields{}),
 					Size: reflect.TypeOf(
 						testImplUnmarshalerWithUnmarshalerFields{},
@@ -1008,18 +1120,21 @@ func TestAppendTypeToStack(t *testing.T) {
 						{Name: "tail", FrameIndex: 3},
 					},
 					Type:             ExpectTypeStruct,
+					Typ:              getTyp(reflect.TypeOf(S4{})),
 					RType:            reflect.TypeOf(S4{}),
 					Size:             reflect.TypeOf(S4{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // S4.Name
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS4.Field(0).Offset,
 				},
 				{ // S4.Unmarshaler
 					Type:             ExpectTypeJSONUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(testImplJSONUnmarshaler{})),
 					Size:             reflect.TypeOf(testImplJSONUnmarshaler{}).Size(),
 					RType:            reflect.TypeOf(testImplJSONUnmarshaler{}),
 					ParentFrameIndex: 0,
@@ -1027,7 +1142,8 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // S4.Tail
 					Type:             ExpectTypeSliceInt,
-					Size:             reflect.TypeOf([]int{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]int(nil))),
+					Size:             reflect.TypeOf([]int(nil)).Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS4.Field(2).Offset,
 				},
@@ -1043,18 +1159,21 @@ func TestAppendTypeToStack(t *testing.T) {
 						{Name: "tail", FrameIndex: 3},
 					},
 					Type:             ExpectTypeStruct,
+					Typ:              getTyp(reflect.TypeOf(S5{})),
 					RType:            reflect.TypeOf(S5{}),
 					Size:             reflect.TypeOf(S5{}).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{ // S5.Name
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS5.Field(0).Offset,
 				},
 				{ // S5.Unmarshaler
 					Type:             ExpectTypeJSONUnmarshaler,
+					Typ:              getTyp(reflect.TypeOf(&testImplJSONUnmarshaler{})),
 					Size:             reflect.TypeOf(&testImplJSONUnmarshaler{}).Size(),
 					RType:            reflect.TypeOf(&testImplJSONUnmarshaler{}),
 					ParentFrameIndex: 0,
@@ -1062,7 +1181,8 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{ // S5.Tail
 					Type:             ExpectTypeSliceInt,
-					Size:             reflect.TypeOf([]int{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]int(nil))),
+					Size:             reflect.TypeOf([]int(nil)).Size(),
 					ParentFrameIndex: 0,
 					Offset:           tpS5.Field(2).Offset,
 				},
@@ -1073,6 +1193,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringString{})),
 					RType: reflect.TypeOf(SStringString{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "String"},
@@ -1082,6 +1203,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStrString,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1092,6 +1214,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringString{})),
 					RType: reflect.TypeOf(SStringString{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "String"},
@@ -1101,6 +1224,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStrString,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1111,6 +1235,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringBool{})),
 					RType: reflect.TypeOf(SStringBool{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Bool"},
@@ -1120,6 +1245,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeBoolString,
+					Typ:              getTyp(reflect.TypeOf(bool(false))),
 					Size:             reflect.TypeOf(bool(false)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1130,6 +1256,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringFloat32{})),
 					RType: reflect.TypeOf(SStringFloat32{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Float32"},
@@ -1139,6 +1266,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeFloat32String,
+					Typ:              getTyp(reflect.TypeOf(float32(0))),
 					Size:             reflect.TypeOf(float32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1149,6 +1277,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringFloat64{})),
 					RType: reflect.TypeOf(SStringFloat64{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Float64"},
@@ -1158,6 +1287,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeFloat64String,
+					Typ:              getTyp(reflect.TypeOf(float64(0))),
 					Size:             reflect.TypeOf(float64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1168,6 +1298,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringInt{})),
 					RType: reflect.TypeOf(SStringInt{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Int"},
@@ -1177,6 +1308,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeIntString,
+					Typ:              getTyp(reflect.TypeOf(int(0))),
 					Size:             reflect.TypeOf(int(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1187,6 +1319,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringInt8{})),
 					RType: reflect.TypeOf(SStringInt8{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Int8"},
@@ -1196,6 +1329,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeInt8String,
+					Typ:              getTyp(reflect.TypeOf(int8(0))),
 					Size:             reflect.TypeOf(int8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1206,6 +1340,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringInt16{})),
 					RType: reflect.TypeOf(SStringInt16{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Int16"},
@@ -1215,6 +1350,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeInt16String,
+					Typ:              getTyp(reflect.TypeOf(int16(0))),
 					Size:             reflect.TypeOf(int16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1225,6 +1361,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringInt32{})),
 					RType: reflect.TypeOf(SStringInt32{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Int32"},
@@ -1234,6 +1371,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeInt32String,
+					Typ:              getTyp(reflect.TypeOf(int32(0))),
 					Size:             reflect.TypeOf(int32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1244,6 +1382,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringInt64{})),
 					RType: reflect.TypeOf(SStringInt64{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Int64"},
@@ -1253,6 +1392,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeInt64String,
+					Typ:              getTyp(reflect.TypeOf(int64(0))),
 					Size:             reflect.TypeOf(int64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1263,6 +1403,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringUint{})),
 					RType: reflect.TypeOf(SStringUint{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Uint"},
@@ -1272,6 +1413,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeUintString,
+					Typ:              getTyp(reflect.TypeOf(uint(0))),
 					Size:             reflect.TypeOf(uint(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1282,6 +1424,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringUint8{})),
 					RType: reflect.TypeOf(SStringUint8{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Uint8"},
@@ -1291,6 +1434,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeUint8String,
+					Typ:              getTyp(reflect.TypeOf(uint8(0))),
 					Size:             reflect.TypeOf(uint8(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1301,6 +1445,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringUint16{})),
 					RType: reflect.TypeOf(SStringUint16{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Uint16"},
@@ -1310,6 +1455,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeUint16String,
+					Typ:              getTyp(reflect.TypeOf(uint16(0))),
 					Size:             reflect.TypeOf(uint16(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1320,6 +1466,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringUint32{})),
 					RType: reflect.TypeOf(SStringUint32{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Uint32"},
@@ -1329,6 +1476,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeUint32String,
+					Typ:              getTyp(reflect.TypeOf(uint32(0))),
 					Size:             reflect.TypeOf(uint32(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1339,6 +1487,7 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:  ExpectTypeStruct,
+					Typ:   getTyp(reflect.TypeOf(SStringUint64{})),
 					RType: reflect.TypeOf(SStringUint64{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 1, Name: "Uint64"},
@@ -1348,6 +1497,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeUint64String,
+					Typ:              getTyp(reflect.TypeOf(uint64(0))),
 					Size:             reflect.TypeOf(uint64(0)).Size(),
 					ParentFrameIndex: 0,
 				},
@@ -1358,11 +1508,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeSlice,
-					Size:             reflect.TypeOf([]SRecurSlice{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]SRecurSlice(nil))),
+					Size:             reflect.TypeOf([]SRecurSlice(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:  ExpectTypeStructRecur,
+					Typ:   getTyp(reflect.TypeOf(SRecurSlice{})),
 					RType: reflect.TypeOf(SRecurSlice{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "ID"},
@@ -1374,13 +1526,15 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					Offset:           reflect.TypeOf(SRecurSlice{}).Field(0).Offset,
 					ParentFrameIndex: 1,
 				},
 				{
 					Type:             ExpectTypeSliceRecur,
-					Size:             reflect.TypeOf([]SRecurSlice{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]SRecurSlice(nil))),
+					Size:             reflect.TypeOf([]SRecurSlice(nil)).Size(),
 					Offset:           reflect.TypeOf(SRecurSlice{}).Field(1).Offset,
 					RecurFrame:       1,
 					ParentFrameIndex: 1,
@@ -1392,11 +1546,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeSlice,
-					Size:             reflect.TypeOf([]SRecurMap{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]SRecurMap(nil))),
+					Size:             reflect.TypeOf([]SRecurMap(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:  ExpectTypeStructRecur,
+					Typ:   getTyp(reflect.TypeOf(SRecurMap{})),
 					RType: reflect.TypeOf(SRecurMap{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "ID"},
@@ -1408,21 +1564,22 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					Offset:           reflect.TypeOf(SRecurMap{}).Field(0).Offset,
 					ParentFrameIndex: 1,
 				},
 				{
 					Type: ExpectTypeMapRecur,
-					MapType: getTyp(reflect.TypeOf(
-						map[string]SRecurMap{},
+					Typ: getTyp(reflect.TypeOf(
+						map[string]SRecurMap(nil),
 					)),
 					MapValueType: getTyp(reflect.TypeOf(
 						SRecurMap{},
 					)),
 					MapCanUseAssignFaststr: true,
 					Size: reflect.TypeOf(
-						map[string]SRecurMap{},
+						map[string]SRecurMap(nil),
 					).Size(),
 					Offset:           reflect.TypeOf(SRecurMap{}).Field(1).Offset,
 					RecurFrame:       1,
@@ -1430,6 +1587,7 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					ParentFrameIndex: 3,
 				},
@@ -1440,11 +1598,13 @@ func TestAppendTypeToStack(t *testing.T) {
 			ExpectStack: []stackFrame[string]{
 				{
 					Type:             ExpectTypeSlice,
-					Size:             reflect.TypeOf([]SRecurPtr{}).Size(),
+					Typ:              getTyp(reflect.TypeOf([]SRecurPtr(nil))),
+					Size:             reflect.TypeOf([]SRecurPtr(nil)).Size(),
 					ParentFrameIndex: noParentFrame,
 				},
 				{
 					Type:  ExpectTypeStructRecur,
+					Typ:   getTyp(reflect.TypeOf(SRecurPtr{})),
 					RType: reflect.TypeOf(SRecurPtr{}),
 					Fields: []fieldStackFrame{
 						{FrameIndex: 2, Name: "ID"},
@@ -1456,12 +1616,14 @@ func TestAppendTypeToStack(t *testing.T) {
 				},
 				{
 					Type:             ExpectTypeStr,
+					Typ:              getTyp(reflect.TypeOf(string(""))),
 					Size:             reflect.TypeOf(string("")).Size(),
 					Offset:           reflect.TypeOf(SRecurPtr{}).Field(0).Offset,
 					ParentFrameIndex: 1,
 				},
 				{
 					Type:             ExpectTypePtrRecur,
+					Typ:              getTyp(reflect.TypeOf((*SRecurPtr)(nil))),
 					Size:             reflect.TypeOf((*SRecurPtr)(nil)).Size(),
 					Offset:           reflect.TypeOf(SRecurPtr{}).Field(1).Offset,
 					RecurFrame:       1,
