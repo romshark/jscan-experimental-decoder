@@ -1552,19 +1552,16 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 					var dp unsafe.Pointer
 					if h := *(*sliceHeader)(p); h.Cap < uintptr(tokens[ti].Elements) {
-						sh := sliceHeader{Len: elems, Cap: elems}
-						if elementSize > 0 {
-							sh.Data = mallocgc(
-								elems*elementSize, d.stackExp[si].Typ, true,
-							)
-						} else {
-							sh.Data = emptyStructAddr
+						sh := sliceHeader{
+							Data: mallocgc(elems*elementSize, d.stackExp[si].Typ, true),
+							Len:  elems,
+							Cap:  elems,
 						}
-						if h.Len != 0 && d.stackExp[si+1].Type.isElemComposite() {
+						if h.Len != 0 {
 							// Must copy existing data because it's not guarenteed
 							// that the existing data will be fully overwritten.
 							typedslicecopy(
-								d.stackExp[si+1].Typ,
+								d.stackExp[recursiveFrame].Typ,
 								sh.Data, int(elems),
 								h.Data, int(h.Len),
 							)
