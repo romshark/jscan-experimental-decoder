@@ -110,6 +110,9 @@ func appendTypeToStack[S []byte | string](
 				ParentFrameIndex: noParentFrame,
 			}), nil
 		case reflect.String:
+			if elem == tpNumber {
+				break
+			}
 			return append(stack, stackFrame[S]{
 				Type:             ExpectTypeSliceString,
 				Typ:              getTyp(t),
@@ -399,12 +402,21 @@ func appendTypeToStack[S []byte | string](
 			ParentFrameIndex: noParentFrame,
 		})
 	case reflect.String:
-		stack = append(stack, stackFrame[S]{
-			Type:             ExpectTypeStr,
-			Typ:              getTyp(t),
-			Size:             t.Size(),
-			ParentFrameIndex: noParentFrame,
-		})
+		if t == tpNumber {
+			stack = append(stack, stackFrame[S]{
+				Type:             ExpectTypeNumber,
+				Typ:              getTyp(t),
+				Size:             t.Size(),
+				ParentFrameIndex: noParentFrame,
+			})
+		} else {
+			stack = append(stack, stackFrame[S]{
+				Type:             ExpectTypeStr,
+				Typ:              getTyp(t),
+				Size:             t.Size(),
+				ParentFrameIndex: noParentFrame,
+			})
+		}
 	case reflect.Int:
 		stack = append(stack, stackFrame[S]{
 			Type:             ExpectTypeInt,

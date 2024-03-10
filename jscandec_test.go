@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -62,60 +63,112 @@ func newTestSetup[T any](
 // expect is optional.
 func (s testSetup[T]) TestOK(t *testing.T, name, input string, expect ...T) {
 	t.Helper()
-	s.TestOKPrepare(t, name, input, nil, expect...)
+	s.TestOKPrepare(t, name, input, Test[T]{})
 }
 
-// TestOKPrepare is similar to TestOK but invokes prepare on input variables
-// before unmarshalling.
-func (s testSetup[T]) TestOKPrepare(
-	t *testing.T, name, input string, prepare func() T, expect ...T,
-) {
+type Test[T any] struct {
+	// OptionsJscanInit is jscandec.DefaultInitOptions by default
+	OptionsJscanInit *jscandec.InitOptions
+
+	// OptionsJscanDecode is jscandec.DefaultOptions by default
+	OptionsJscanDecode *jscandec.DecodeOptions
+
+	// PrepareJscan is optional and produces the value passed to
+	// `jscandec.(*Decoder).Decode`.
+	PrepareJscan func() T
+
+	// PrepareEncodingjson is optional and produces the value passed to
+	// `encoding/json.(*Decoder).Decode` if not nil, otherwise the value of PrepareJscan
+	// is used if PrepareEncodingjson == nil and PrepareJscan != nil.
+	// If borh are nil, then the value passed will be a pointer to the zero value of T.
+	PrepareEncodingjson func() any
+
+	// Expect is optional. If Expect != nil then the jscan result is compared against it.
+	Expect any
+
+	// Check is optional and used to check the result of jscandec and compare its
+	// result with the result of encoding/json. If Check is nil, then
+	// vJscan and vEncodingJson are compared directly.
+	Check func(t *testing.T, vJscan T, vEncodingJson any)
+}
+
+// TestOKPrepare is similar to TestOK but invokes prepareJscan on input variables
+// before unmarshalling. If
+func (s testSetup[T]) TestOKPrepare(t *testing.T, name, input string, test Test[T]) {
 	t.Helper()
-	if len(expect) > 1 {
-		t.Fatalf("more than one (%d) expectation", len(expect))
-	}
-	check := func(t *testing.T, stdResult, jscanResult T) {
+	check := func(t *testing.T, resultEncodingjson any, resultJscan *T) {
 		t.Helper()
-		require.Equal(t, stdResult, jscanResult,
-			"deviation between encoding/json and jscan results")
-		if len(expect) > 0 {
-			require.Equal(t, expect[0], jscanResult)
+		{
+			// Make sure that the result data for jscan and encoding/json
+			// resides at different addresses because otherwise the comparison
+			// could yield false positive results. The only exception are types
+			// of size zero, such as empty struct and its derivatives.
+			type emptyIface struct{ _, Data unsafe.Pointer }
+			if (*emptyIface)(unsafe.Pointer(&resultEncodingjson)).Data == unsafe.Pointer(resultJscan) &&
+				reflect.TypeOf(resultJscan).Elem().Size() != 0 {
+				t.Fatal("the encoding/json and jscan variables " +
+					"must reside at different addresses")
+			}
+
 		}
-		runtime.GC() // Make sure GC is happy
+
+		// Make sure GC is happy
+		runtime.GC()
+		runtime.GC()
+
+		if test.Expect != nil {
+			require.Equal(t, test.Expect, *resultJscan, "unexpected jscan result")
+		}
+		if test.Check == nil {
+			require.Equal(t, resultEncodingjson, resultJscan,
+				"deviation between encoding/json and jscan results")
+		} else {
+			test.Check(t, *resultJscan, resultEncodingjson)
+		}
+	}
+	prepare := func() (vJscan T, vEncodingJson any) {
+		if test.PrepareJscan != nil {
+			vJscan = test.PrepareJscan()
+		}
+		if test.PrepareEncodingjson != nil {
+			vEncodingJson = test.PrepareEncodingjson()
+		} else if test.PrepareJscan != nil {
+			v := test.PrepareJscan()
+			vEncodingJson = &v
+		} else {
+			vEncodingJson = &vJscan
+		}
+		return vJscan, vEncodingJson
 	}
 	t.Run(name+"/bytes", func(t *testing.T) {
 		t.Helper()
-		var std, actual T
-		if prepare != nil {
-			std, actual = prepare(), prepare()
-		}
-		stdDec := json.NewDecoder(strings.NewReader(input))
+		vJscan, vEncodingJson := prepare()
+
+		dEncodingJson := json.NewDecoder(strings.NewReader(input))
 		if s.decodeOptions.DisallowUnknownFields {
-			stdDec.DisallowUnknownFields()
+			dEncodingJson.DisallowUnknownFields()
 		}
-		require.NoError(t, stdDec.Decode(&std), "error in encoding/json")
-		err := s.decoderBytes.Decode([]byte(input), &actual, s.decodeOptions)
+		require.NoError(t, dEncodingJson.Decode(vEncodingJson), "error in encoding/json")
+		err := s.decoderBytes.Decode([]byte(input), &vJscan, s.decodeOptions)
 		if err.IsErr() {
 			t.Fatal(err.Error())
 		}
-		check(t, std, actual)
+		check(t, vEncodingJson, &vJscan)
 	})
 	t.Run(name+"/string", func(t *testing.T) {
 		t.Helper()
-		var std, actual T
-		if prepare != nil {
-			std, actual = prepare(), prepare()
-		}
-		stdDec := json.NewDecoder(strings.NewReader(input))
+		vJscan, vEncodingJson := prepare()
+
+		dEncodingJson := json.NewDecoder(strings.NewReader(input))
 		if s.decodeOptions.DisallowUnknownFields {
-			stdDec.DisallowUnknownFields()
+			dEncodingJson.DisallowUnknownFields()
 		}
-		require.NoError(t, stdDec.Decode(&std), "error in encoding/json")
-		err := s.decoderString.Decode(input, &actual, s.decodeOptions)
+		require.NoError(t, dEncodingJson.Decode(vEncodingJson), "error in encoding/json")
+		err := s.decoderString.Decode(input, &vJscan, s.decodeOptions)
 		if err.IsErr() {
 			t.Fatal(err.Error())
 		}
-		check(t, std, actual)
+		check(t, vEncodingJson, &vJscan)
 	})
 }
 
@@ -225,36 +278,50 @@ func TestDecodeAny(t *testing.T) {
 		"null":        nil,
 	})
 
-	s.TestOKPrepare(t, "overwrite_int->bool", `true`,
-		func() any { return int(42) }, true)
-	s.TestOKPrepare(t, "overwrite_bool->float64", `42`,
-		func() any { return true }, float64(42))
+	s.TestOKPrepare(t, "overwrite_int->bool", `true`, Test[any]{
+		PrepareJscan: func() any { return int(42) },
+		Expect:       true,
+	})
+	s.TestOKPrepare(t, "overwrite_bool->float64", `42`, Test[any]{
+		PrepareJscan: func() any { return true },
+		Expect:       float64(42),
+	})
 
 	{
 		type S struct {
 			ID   int
 			Name string
 		}
-		s.TestOKPrepare(t, "overwrite_S->map", `{"id":42,"name":"John"}`,
-			func() any { return S{ID: 1, Name: "Alice"} },
-			map[string]any{"id": float64(42), "name": "John"},
-		)
-		s.TestOKPrepare(t, "overwrite_slice", `42`,
-			func() any {
+		s.TestOKPrepare(t, "overwrite_S->map", `{"id":42,"name":"John"}`, Test[any]{
+			PrepareJscan: func() any { return S{ID: 1, Name: "Alice"} },
+			Expect:       map[string]any{"id": float64(42), "name": "John"},
+		})
+		s.TestOKPrepare(t, "overwrite_slice", `42`, Test[any]{
+			PrepareJscan: func() any {
 				return []S{
 					{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"},
 				}
 			},
-			float64(42))
+			Expect: float64(42),
+		})
 
-		s.TestOKPrepare(t, "overwrite_sliceS->map", `[{"name":"John"}]`,
-			func() any { return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}} },
-			[]any{map[string]any{"name": "John"}},
-		)
-		s.TestOKPrepare(t, "no_overwrite_null", `null`,
-			func() any { return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}} },
-			any(nil),
-		)
+		s.TestOKPrepare(t, "overwrite_sliceS->map", `[{"name":"John"}]`, Test[any]{
+			PrepareJscan: func() any {
+				return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}}
+			},
+			Expect: []any{map[string]any{"name": "John"}},
+		})
+		s.TestOKPrepare(t, "no_overwrite_null", `null`, Test[any]{
+			PrepareJscan: func() any {
+				return []S{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}}
+			},
+			// Check explicitly for any(nil) because otherwise
+			// Test.Expect will be ignored.
+			Check: func(t *testing.T, vJscan, vEncodingJson any) {
+				require.Nil(t, vJscan)
+				require.Equal(t, any(nil), *vEncodingJson.(*any))
+			},
+		})
 	}
 
 	s.testErrCheck(t, "float_range_hi", `1e309`,
@@ -682,14 +749,22 @@ func TestDecodeSliceInt(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []int { return []int{10, 20, 30} }, []int{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []int { return []int(nil) }, []int{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []int { return []int{10, 20} }, []int{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []int { return []int{10, 20, 30, 40} }, []int{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int { return []int{10, 20, 30} },
+		Expect:       []int{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int { return []int(nil) },
+		Expect:       []int{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int { return []int{10, 20} },
+		Expect:       []int{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int { return []int{10, 20, 30, 40} },
+		Expect:       []int{1, 2, 3},
+	})
 
 	s.testErr(t, "overflow_hi", `[9223372036854775808]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
@@ -715,14 +790,22 @@ func TestDecodeSliceInt8(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []int8 { return []int8{10, 20, 30} }, []int8{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []int8 { return []int8(nil) }, []int8{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []int8 { return []int8{10, 20} }, []int8{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []int8 { return []int8{10, 20, 30, 40} }, []int8{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int8 { return []int8{10, 20, 30} },
+		Expect:       []int8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int8 { return []int8(nil) },
+		Expect:       []int8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int8 { return []int8{10, 20} },
+		Expect:       []int8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int8 { return []int8{10, 20, 30, 40} },
+		Expect:       []int8{1, 2, 3},
+	})
 
 	s.testErr(t, "overflow_hi", `[128]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
@@ -748,14 +831,22 @@ func TestDecodeSliceInt16(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []int16 { return []int16{10, 20, 30} }, []int16{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []int16 { return []int16(nil) }, []int16{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []int16 { return []int16{10, 20} }, []int16{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []int16 { return []int16{10, 20, 30, 40} }, []int16{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int16 { return []int16{10, 20, 30} },
+		Expect:       []int16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int16 { return []int16(nil) },
+		Expect:       []int16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int16 { return []int16{10, 20} },
+		Expect:       []int16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int16 { return []int16{10, 20, 30, 40} },
+		Expect:       []int16{1, 2, 3},
+	})
 
 	s.testErr(t, "overflow_hi", `[32768]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
@@ -781,14 +872,22 @@ func TestDecodeSliceInt32(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []int32 { return []int32{10, 20, 30} }, []int32{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []int32 { return []int32(nil) }, []int32{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []int32 { return []int32{10, 20} }, []int32{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []int32 { return []int32{10, 20, 30, 40} }, []int32{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int32 { return []int32{10, 20, 30} },
+		Expect:       []int32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int32 { return []int32(nil) },
+		Expect:       []int32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int32 { return []int32{10, 20} },
+		Expect:       []int32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int32 { return []int32{10, 20, 30, 40} },
+		Expect:       []int32{1, 2, 3},
+	})
 
 	s.testErr(t, "overflow_hi", `[2147483648]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
@@ -814,14 +913,22 @@ func TestDecodeSliceInt64(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []int64 { return []int64{10, 20, 30} }, []int64{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []int64 { return []int64(nil) }, []int64{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []int64 { return []int64{10, 20} }, []int64{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []int64 { return []int64{10, 20, 30, 40} }, []int64{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int64 { return []int64{10, 20, 30} },
+		Expect:       []int64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int64 { return []int64(nil) },
+		Expect:       []int64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int64 { return []int64{10, 20} },
+		Expect:       []int64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []int64 { return []int64{10, 20, 30, 40} },
+		Expect:       []int64{1, 2, 3},
+	})
 
 	s.testErr(t, "overflow_hi", `[9223372036854775808]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrIntegerOverflow, Index: 1})
@@ -848,14 +955,22 @@ func TestDecodeSliceUint(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []uint { return []uint{10, 20, 30} }, []uint{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint { return []uint(nil) }, []uint{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []uint { return []uint{10, 20} }, []uint{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []uint { return []uint{10, 20, 30, 40} }, []uint{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint { return []uint{10, 20, 30} },
+		Expect:       []uint{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint { return []uint(nil) },
+		Expect:       []uint{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint { return []uint{10, 20} },
+		Expect:       []uint{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint { return []uint{10, 20, 30, 40} },
+		Expect:       []uint{1, 2, 3},
+	})
 
 	s.testErr(t, "negative", `[-1]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -882,14 +997,22 @@ func TestDecodeSliceUint8(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []uint8 { return []uint8{10, 20, 30} }, []uint8{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint8 { return []uint8(nil) }, []uint8{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []uint8 { return []uint8{10, 20} }, []uint8{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []uint8 { return []uint8{10, 20, 30, 40} }, []uint8{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint8 { return []uint8{10, 20, 30} },
+		Expect:       []uint8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint8 { return []uint8(nil) },
+		Expect:       []uint8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint8 { return []uint8{10, 20} },
+		Expect:       []uint8{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint8 { return []uint8{10, 20, 30, 40} },
+		Expect:       []uint8{1, 2, 3},
+	})
 
 	s.testErr(t, "negative", `[-1]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -916,14 +1039,22 @@ func TestDecodeSliceUint16(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []uint16 { return []uint16{10, 20, 30} }, []uint16{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint16 { return []uint16(nil) }, []uint16{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint16 { return []uint16{10, 20} }, []uint16{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []uint16 { return []uint16{10, 20, 30, 40} }, []uint16{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint16 { return []uint16{10, 20, 30} },
+		Expect:       []uint16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint16 { return []uint16(nil) },
+		Expect:       []uint16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint16 { return []uint16{10, 20} },
+		Expect:       []uint16{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint16 { return []uint16{10, 20, 30, 40} },
+		Expect:       []uint16{1, 2, 3},
+	})
 
 	s.testErr(t, "negative", `[-1]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -950,14 +1081,22 @@ func TestDecodeSliceUint32(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []uint32 { return []uint32{10, 20, 30} }, []uint32{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint32 { return []uint32(nil) }, []uint32{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []uint32 { return []uint32{10, 20} }, []uint32{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []uint32 { return []uint32{10, 20, 30, 40} }, []uint32{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint32 { return []uint32{10, 20, 30} },
+		Expect:       []uint32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint32 { return []uint32(nil) },
+		Expect:       []uint32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint32 { return []uint32{10, 20} },
+		Expect:       []uint32{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint32 { return []uint32{10, 20, 30, 40} },
+		Expect:       []uint32{1, 2, 3},
+	})
 
 	s.testErr(t, "negative", `[-1]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -984,14 +1123,22 @@ func TestDecodeSliceUint64(t *testing.T) {
 	s.TestOK(t, "null_element", `[ null ]`, T{0})
 	s.TestOK(t, "null_element_multi", `[ null, 1, null ]`, T{0, 1, 0})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`,
-		func() []uint64 { return []uint64{10, 20, 30} }, []uint64{1, 2, 3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`,
-		func() []uint64 { return []uint64(nil) }, []uint64{1, 2, 3})
-	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`,
-		func() []uint64 { return []uint64{10, 20} }, []uint64{1, 2, 3})
-	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`,
-		func() []uint64 { return []uint64{10, 20, 30, 40} }, []uint64{1, 2, 3})
+	s.TestOKPrepare(t, "var_overwrite", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint64 { return []uint64{10, 20, 30} },
+		Expect:       []uint64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint64 { return []uint64(nil) },
+		Expect:       []uint64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint64 { return []uint64{10, 20} },
+		Expect:       []uint64{1, 2, 3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1,2,3]`, Test[T]{
+		PrepareJscan: func() []uint64 { return []uint64{10, 20, 30, 40} },
+		Expect:       []uint64{1, 2, 3},
+	})
 
 	s.testErr(t, "negative", `[-1]`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -1018,14 +1165,22 @@ func TestDecodeSliceString(t *testing.T) {
 	s.TestOK(t, "null_element_multi", `[null,"okay",null]`, T{"", "okay", ""})
 	s.TestOK(t, "array_str_1024_639k", arrayStr1024)
 
-	s.TestOKPrepare(t, "var_overwrite", `["x","y","z"]`,
-		func() []string { return []string{"a", "b", "c"} }, []string{"x", "y", "z"})
-	s.TestOKPrepare(t, "var_nil_realloc", `["x","y","z"]`,
-		func() []string { return []string(nil) }, []string{"x", "y", "z"})
-	s.TestOKPrepare(t, "var_realloc", `["x","y","z"]`,
-		func() []string { return []string{"a", "b"} }, []string{"x", "y", "z"})
-	s.TestOKPrepare(t, "var_overwrite", `["x","y","z"]`,
-		func() []string { return []string{"a", "b", "c", "d"} }, []string{"x", "y", "z"})
+	s.TestOKPrepare(t, "var_overwrite", `["x","y","z"]`, Test[T]{
+		PrepareJscan: func() []string { return []string{"a", "b", "c"} },
+		Expect:       []string{"x", "y", "z"},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `["x","y","z"]`, Test[T]{
+		PrepareJscan: func() []string { return []string(nil) },
+		Expect:       []string{"x", "y", "z"},
+	})
+	s.TestOKPrepare(t, "var_realloc", `["x","y","z"]`, Test[T]{
+		PrepareJscan: func() []string { return []string{"a", "b"} },
+		Expect:       []string{"x", "y", "z"},
+	})
+	s.TestOKPrepare(t, "var_overwrite", `["x","y","z"]`, Test[T]{
+		PrepareJscan: func() []string { return []string{"a", "b", "c", "d"} },
+		Expect:       []string{"x", "y", "z"},
+	})
 
 	s.testErr(t, "wrong_type_string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -1051,15 +1206,22 @@ func TestDecodeSliceBool(t *testing.T) {
 	s.TestOK(t, "null_element", `[null]`, T{false})
 	s.TestOK(t, "null_element_multi", `[null,true,null]`, T{false, true, false})
 
-	s.TestOKPrepare(t, "var_overwrite", `[true,false,true]`,
-		func() []bool { return []bool{false, true, false} }, []bool{true, false, true})
-	s.TestOKPrepare(t, "var_nil_realloc", `[true, false, true]`,
-		func() []bool { return []bool(nil) }, []bool{true, false, true})
-	s.TestOKPrepare(t, "var_realloc", `[true, false, true]`,
-		func() []bool { return []bool{false, false} }, []bool{true, false, true})
-	s.TestOKPrepare(t, "var_shrink", `[true, false, true]`,
-		func() []bool { return []bool{false, true, true, true} },
-		[]bool{true, false, true})
+	s.TestOKPrepare(t, "var_overwrite", `[true,false,true]`, Test[T]{
+		PrepareJscan: func() []bool { return []bool{false, true, false} },
+		Expect:       []bool{true, false, true},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[true, false, true]`, Test[T]{
+		PrepareJscan: func() []bool { return []bool(nil) },
+		Expect:       []bool{true, false, true},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[true, false, true]`, Test[T]{
+		PrepareJscan: func() []bool { return []bool{false, false} },
+		Expect:       []bool{true, false, true},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[true, false, true]`, Test[T]{
+		PrepareJscan: func() []bool { return []bool{false, true, true, true} },
+		Expect:       []bool{true, false, true},
+	})
 
 	s.testErr(t, "wrong_type_string", `"text"`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -1094,16 +1256,22 @@ func TestDecodeSliceFloat32(t *testing.T) {
 	s.TestOK(t, "-3.4e38", `[-3.4e38]`, T{-3.4e38})
 	s.TestOK(t, "avogadros_num", `[6.022e23]`, T{6.022e23})
 
-	s.TestOKPrepare(t, "var_overwrite", `[1.1, 2.2, 3.3]`,
-		func() []float32 { return []float32{10.1, 20.2, 30.3} },
-		[]float32{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1.1, 2.2, 3.3]`,
-		func() []float32 { return []float32(nil) }, []float32{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_realloc", `[1.1, 2.2, 3.3]`,
-		func() []float32 { return []float32{10.1, 20.2} }, []float32{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_shrink", `[1.1, 2.2, 3.3]`,
-		func() []float32 { return []float32{10.1, 20.2, 30.3, 40.4} },
-		[]float32{1.1, 2.2, 3.3})
+	s.TestOKPrepare(t, "var_overwrite", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float32 { return []float32{10.1, 20.2, 30.3} },
+		Expect:       []float32{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float32 { return []float32(nil) },
+		Expect:       []float32{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float32 { return []float32{10.1, 20.2} },
+		Expect:       []float32{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float32 { return []float32{10.1, 20.2, 30.3, 40.4} },
+		Expect:       []float32{1.1, 2.2, 3.3},
+	})
 
 	s.testErrCheck(t, "range_hi", `[3.5e38]`,
 		func(t *testing.T, err jscandec.ErrorDecode) {
@@ -1154,16 +1322,22 @@ func TestDecodeSliceFloat64(t *testing.T) {
 	s.TestOK(t, "avogadros_num", `[6.022e23]`, T{6.022e23})
 	s.TestOK(t, "array_float_1024", arrayFloat1024)
 
-	s.TestOKPrepare(t, "var_overwrite", `[1.1, 2.2, 3.3]`,
-		func() []float64 { return []float64{10.1, 20.2, 30.3} },
-		[]float64{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_nil_realloc", `[1.1, 2.2, 3.3]`,
-		func() []float64 { return []float64(nil) }, []float64{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_realloc", `[1.1, 2.2, 3.3]`,
-		func() []float64 { return []float64{10.1, 20.2} }, []float64{1.1, 2.2, 3.3})
-	s.TestOKPrepare(t, "var_shrink", `[1.1, 2.2, 3.3]`,
-		func() []float64 { return []float64{10.1, 20.2, 30.3, 40.4} },
-		[]float64{1.1, 2.2, 3.3})
+	s.TestOKPrepare(t, "var_overwrite", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float64 { return []float64{10.1, 20.2, 30.3} },
+		Expect:       []float64{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float64 { return []float64(nil) },
+		Expect:       []float64{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float64 { return []float64{10.1, 20.2} },
+		Expect:       []float64{1.1, 2.2, 3.3},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[1.1, 2.2, 3.3]`, Test[T]{
+		PrepareJscan: func() []float64 { return []float64{10.1, 20.2, 30.3, 40.4} },
+		Expect:       []float64{1.1, 2.2, 3.3},
+	})
 
 	s.testErrCheck(t, "range_hi", `[1e309]`,
 		func(t *testing.T, err jscandec.ErrorDecode) {
@@ -1193,14 +1367,22 @@ func TestDecode2DSliceInt(t *testing.T) {
 	s.TestOK(t, "2_0", `[[],[]]`, T{{}, {}})
 	s.TestOK(t, "1", `[]`, T{})
 
-	s.TestOKPrepare(t, "var_overwrite", `[ [1], [], [3] ]`,
-		func() [][]int { return [][]int{{10}, {20}, {30}} }, [][]int{{1}, {}, {3}})
-	s.TestOKPrepare(t, "var_nil_realloc", `[ [1], [], [3] ]`,
-		func() [][]int { return [][]int(nil) }, [][]int{{1}, {}, {3}})
-	s.TestOKPrepare(t, "var_realloc", `[ [1], [], [3] ]`,
-		func() [][]int { return [][]int{{10}, {20}} }, [][]int{{1}, {}, {3}})
-	s.TestOKPrepare(t, "var_shrink", `[ [1], [], [3] ]`,
-		func() [][]int { return [][]int{{10}, {20}, {30}, {40}} }, [][]int{{1}, {}, {3}})
+	s.TestOKPrepare(t, "var_overwrite", `[ [1], [], [3] ]`, Test[T]{
+		PrepareJscan: func() [][]int { return [][]int{{10}, {20}, {30}} },
+		Expect:       [][]int{{1}, {}, {3}},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[ [1], [], [3] ]`, Test[T]{
+		PrepareJscan: func() [][]int { return [][]int(nil) },
+		Expect:       [][]int{{1}, {}, {3}},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[ [1], [], [3] ]`, Test[T]{
+		PrepareJscan: func() [][]int { return [][]int{{10}, {20}} },
+		Expect:       [][]int{{1}, {}, {3}},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[ [1], [], [3] ]`, Test[T]{
+		PrepareJscan: func() [][]int { return [][]int{{10}, {20}, {30}, {40}} },
+		Expect:       [][]int{{1}, {}, {3}},
+	})
 }
 
 func TestDecodeMatrix2Int(t *testing.T) {
@@ -1277,20 +1459,29 @@ func TestDecodeEmptyStruct(t *testing.T) {
 
 func TestDecodeSliceEmptyStruct(t *testing.T) {
 	type S struct{}
-	s := newTestSetup[[]S](t, *jscandec.DefaultOptions)
+	type T = []S
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "null", `null`, []S(nil))
 	s.TestOK(t, "empty_array", `[]`, []S{})
 	s.TestOK(t, "array_one", `[{}]`, []S{{}})
 	s.TestOK(t, "array_multiple", `[{},{},{}]`, []S{{}, {}, {}})
 
-	s.TestOKPrepare(t, "var_overwrite", `[{}, null, {}]`,
-		func() []S { return []S{{}, {}, {}} }, []S{{}, {}, {}})
-	s.TestOKPrepare(t, "var_nil_realloc", `[{}, null, {}]`,
-		func() []S { return []S(nil) }, []S{{}, {}, {}})
-	s.TestOKPrepare(t, "var_realloc", `[{}, null, {}]`,
-		func() []S { return []S{{}, {}} }, []S{{}, {}, {}})
-	s.TestOKPrepare(t, "var_shrink", `[{}, null, {}]`,
-		func() []S { return []S{{}, {}, {}, {}} }, []S{{}, {}, {}})
+	s.TestOKPrepare(t, "var_overwrite", `[{}, null, {}]`, Test[T]{
+		PrepareJscan: func() []S { return []S{{}, {}, {}} },
+		Expect:       []S{{}, {}, {}},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[{}, null, {}]`, Test[T]{
+		PrepareJscan: func() []S { return []S(nil) },
+		Expect:       []S{{}, {}, {}},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[{}, null, {}]`, Test[T]{
+		PrepareJscan: func() []S { return []S{{}, {}} },
+		Expect:       []S{{}, {}, {}},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[{}, null, {}]`, Test[T]{
+		PrepareJscan: func() []S { return []S{{}, {}, {}, {}} },
+		Expect:       []S{{}, {}, {}},
+	})
 
 	s.testErr(t, "true", `true`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -1308,7 +1499,8 @@ func TestDecodeSliceEmptyStruct(t *testing.T) {
 
 func TestDecodeSliceStruct(t *testing.T) {
 	type S struct{ A, B int }
-	s := newTestSetup[[]S](t, *jscandec.DefaultOptions)
+	type T = []S
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "null", `null`, []S(nil))
 	s.TestOK(t, "empty_array", `[]`, []S{})
 	s.TestOK(t, "item_empty", `[{}]`, []S{{}})
@@ -1319,21 +1511,26 @@ func TestDecodeSliceStruct(t *testing.T) {
 	s.TestOK(t, "items_empty", `[{},null,{}]`, []S{{}, {}, {}})
 	s.TestOK(t, "items_partial", `[{"B":2},null,{"A":3}]`, []S{{B: 2}, {}, {A: 3}})
 
-	s.TestOKPrepare(t, "var_overwrite", `[{"A":1}, {"B":2}, {"C":3,"B":3}]`,
-		func() []S { return []S{{A: 9, B: 9}, {A: 9, B: 9}, {A: 9, B: 9}} },
-		[]S{{A: 1, B: 9}, {A: 9, B: 2}, {A: 9, B: 3}})
-	s.TestOKPrepare(t, "var_nil_realloc", `[{}, null, {"B":1}]`,
-		func() []S { return []S(nil) }, []S{{}, {}, {B: 1}})
-	s.TestOKPrepare(t, "var_realloc", `[ {"B":1}, null, {"A":1, "B":2} ]`,
-		func() []S { return []S{{A: 9, B: 9}, {A: 9, B: 9}} },
-		[]S{{A: 9, B: 1}, {A: 9, B: 9}, {A: 1, B: 2}})
-	s.TestOKPrepare(t, "var_shrink", `[{}, null, {"A":42}, {"A":1,"B":2}]`,
-		func() []S {
+	s.TestOKPrepare(t, "var_overwrite", `[{"A":1}, {"B":2}, {"C":3,"B":3}]`, Test[T]{
+		PrepareJscan: func() []S { return []S{{A: 9, B: 9}, {A: 9, B: 9}, {A: 9, B: 9}} },
+		Expect:       []S{{A: 1, B: 9}, {A: 9, B: 2}, {A: 9, B: 3}},
+	})
+	s.TestOKPrepare(t, "var_nil_realloc", `[{}, null, {"B":1}]`, Test[T]{
+		PrepareJscan: func() []S { return []S(nil) },
+		Expect:       []S{{}, {}, {B: 1}},
+	})
+	s.TestOKPrepare(t, "var_realloc", `[ {"B":1}, null, {"A":1, "B":2} ]`, Test[T]{
+		PrepareJscan: func() []S { return []S{{A: 9, B: 9}, {A: 9, B: 9}} },
+		Expect:       []S{{A: 9, B: 1}, {A: 9, B: 9}, {A: 1, B: 2}},
+	})
+	s.TestOKPrepare(t, "var_shrink", `[{}, null, {"A":42}, {"A":1,"B":2}]`, Test[T]{
+		PrepareJscan: func() []S {
 			return []S{
 				{A: 9, B: 9}, {A: 9, B: 9}, {A: 9, B: 9}, {A: 9, B: 9}, {A: 9, B: 9},
 			}
 		},
-		[]S{{A: 9, B: 9}, {A: 9, B: 9}, {A: 42, B: 9}, {A: 1, B: 2}})
+		Expect: []S{{A: 9, B: 9}, {A: 9, B: 9}, {A: 42, B: 9}, {A: 1, B: 2}},
+	})
 
 	s.testErr(t, "true", `true`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -1524,7 +1721,8 @@ func TestDecodeStruct(t *testing.T) {
 		Foo int    `json:"foo"`
 		Bar string `json:"bar"`
 	}
-	s := newTestSetup[S](t, *jscandec.DefaultOptions)
+	type T = S
+	s := newTestSetup[T](t, *jscandec.DefaultOptions)
 	s.TestOK(t, "regular_field_order",
 		`{"foo":42,"bar":"bazz"}`, S{Foo: 42, Bar: "bazz"})
 	s.TestOK(t, "reversed_field_order",
@@ -1547,14 +1745,22 @@ func TestDecodeStruct(t *testing.T) {
 	s.TestOK(t, "empty", `{}`, S{})
 	s.TestOK(t, "name_mismatch", `{"faz":42,"baz":"bazz"}`, S{})
 
-	s.TestOKPrepare(t, "overwrite", `{"foo":42,"bar":"bazz"}`,
-		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 42, Bar: "bazz"})
-	s.TestOKPrepare(t, "overwrite_foo", `{"foo":42}`,
-		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 42, Bar: "predefined"})
-	s.TestOKPrepare(t, "overwrite_bar", `{"bar":"newval"}`,
-		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 99, Bar: "newval"})
-	s.TestOKPrepare(t, "unknown_field_overwrite", `{"fazz":false}`,
-		func() S { return S{Foo: 99, Bar: "predefined"} }, S{Foo: 99, Bar: "predefined"})
+	s.TestOKPrepare(t, "overwrite", `{"foo":42,"bar":"bazz"}`, Test[T]{
+		PrepareJscan: func() S { return S{Foo: 99, Bar: "predefined"} },
+		Expect:       S{Foo: 42, Bar: "bazz"},
+	})
+	s.TestOKPrepare(t, "overwrite_foo", `{"foo":42}`, Test[T]{
+		PrepareJscan: func() S { return S{Foo: 99, Bar: "predefined"} },
+		Expect:       S{Foo: 42, Bar: "predefined"},
+	})
+	s.TestOKPrepare(t, "overwrite_bar", `{"bar":"newval"}`, Test[T]{
+		PrepareJscan: func() S { return S{Foo: 99, Bar: "predefined"} },
+		Expect:       S{Foo: 99, Bar: "newval"},
+	})
+	s.TestOKPrepare(t, "unknown_field_overwrite", `{"fazz":false}`, Test[T]{
+		PrepareJscan: func() S { return S{Foo: 99, Bar: "predefined"} },
+		Expect:       S{Foo: 99, Bar: "predefined"},
+	})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -1660,21 +1866,33 @@ func TestDecodeStructRecursivePtr(t *testing.T) {
 		}`,
 		S{ID: "root", Recurse: &S{ID: "level2", Recurse: &S{ID: "level3"}}})
 
-	s.TestOKPrepare(t, "overwrite", `{"name":"Root", "recurse":{"name": "L2"}}`,
-		func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
-		S{ID: "root", Name: "Root", Recurse: &S{ID: "level2", Name: "L2"}})
+	s.TestOKPrepare(t, "overwrite",
+		`{"name":"Root", "recurse":{"name": "L2"}}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
+			Expect: S{
+				ID: "root", Name: "Root", Recurse: &S{ID: "level2", Name: "L2"},
+			},
+		})
 
-	s.TestOKPrepare(t, "overwrite_null_level2", `{"name":"Root", "recurse":null}`,
-		func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
-		S{ID: "root", Name: "Root", Recurse: nil})
+	s.TestOKPrepare(t, "overwrite_null_level2",
+		`{"name":"Root", "recurse":null}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: nil},
+		})
 
-	s.TestOKPrepare(t, "overwrite_empty_level2", `{"name":"Root", "recurse":{}}`,
-		func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
-		S{ID: "root", Name: "Root", Recurse: &S{ID: "level2"}})
+	s.TestOKPrepare(t, "overwrite_empty_level2",
+		`{"name":"Root", "recurse":{}}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: &S{ID: "level2"}},
+		})
 	s.TestOKPrepare(t, "overwrite_unknown_field_level2",
-		`{"name":"Root", "recurse":{"fuzz":"inexistent"}}`,
-		func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
-		S{ID: "root", Name: "Root", Recurse: &S{ID: "level2"}})
+		`{"name":"Root", "recurse":{"fuzz":"inexistent"}}`, Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: &S{ID: "level2"}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: &S{ID: "level2"}},
+		})
 
 	s.testErr(t, "wrong_type_level2", `{"id":"root","recurse":[]}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 23})
@@ -1784,21 +2002,34 @@ func TestDecodeStructRecursiveSlice(t *testing.T) {
 		}`,
 		S{ID: "root", Recurse: []S{{ID: "level2", Recurse: []S{{ID: "level3"}}}}})
 
-	s.TestOKPrepare(t, "overwrite", `{"name":"Root", "recurse":[{"name": "L2"}]}`,
-		func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: []S{{ID: "level2", Name: "L2"}}})
+	s.TestOKPrepare(t, "overwrite",
+		`{"name":"Root", "recurse":[{"name": "L2"}]}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
+			Expect: S{
+				ID: "root", Name: "Root", Recurse: []S{{ID: "level2", Name: "L2"}},
+			},
+		})
 
-	s.TestOKPrepare(t, "overwrite_null_level2", `{"name":"Root", "recurse":null}`,
-		func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: nil})
+	s.TestOKPrepare(t, "overwrite_null_level2",
+		`{"name":"Root", "recurse":null}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: nil},
+		})
 
-	s.TestOKPrepare(t, "overwrite_empty_level2", `{"name":"Root", "recurse":[{}]}`,
-		func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: []S{{ID: "level2"}}})
+	s.TestOKPrepare(t, "overwrite_empty_level2",
+		`{"name":"Root", "recurse":[{}]}`,
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: []S{{ID: "level2"}}},
+		})
 	s.TestOKPrepare(t, "overwrite_unknown_field_level2",
 		`{"name":"Root", "recurse":[{"fuzz":"inexistent"}]}`,
-		func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: []S{{ID: "level2"}}})
+		Test[S]{
+			PrepareJscan: func() S { return S{ID: "root", Recurse: []S{{ID: "level2"}}} },
+			Expect:       S{ID: "root", Name: "Root", Recurse: []S{{ID: "level2"}}},
+		})
 
 	s.testErr(t, "wrong_type_level2", `{"id":"root","recurse":{}}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 23})
@@ -1956,28 +2187,51 @@ func TestDecodeStructRecursiveMap(t *testing.T) {
 			},
 		}})
 
-	s.TestOKPrepare(t, "overwrite", `{"name":"Root", "recurse":{"L2": {"name": "L2"}}}`,
-		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
-		S{
-			ID: "root", Name: "Root", Recurse: map[string]S{
-				"L2": {
-					Name: "L2", Recurse: map[string]S(nil),
+	s.TestOKPrepare(t, "overwrite",
+		`{"name":"Root", "recurse":{"L2": {"name": "L2"}}}`,
+		Test[S]{
+			PrepareJscan: func() S {
+				return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}}
+			},
+			Expect: S{
+				ID: "root", Name: "Root", Recurse: map[string]S{
+					"L2": {
+						Name: "L2", Recurse: map[string]S(nil),
+					},
 				},
 			},
 		})
 
-	s.TestOKPrepare(t, "overwrite_null_level2", `{"name":"Root", "recurse":null}`,
-		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: nil})
+	s.TestOKPrepare(t, "overwrite_null_level2",
+		`{"name":"Root", "recurse":null}`,
+		Test[S]{
+			PrepareJscan: func() S {
+				return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}}
+			},
+			Expect: S{ID: "root", Name: "Root", Recurse: nil},
+		})
 
-	s.TestOKPrepare(t, "overwrite_empty_level2", `{"name":"Root", "recurse":{"L2": {}}}`,
-		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }}})
+	s.TestOKPrepare(t, "overwrite_empty_level2",
+		`{"name":"Root", "recurse":{"L2": {}}}`,
+		Test[S]{
+			PrepareJscan: func() S {
+				return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}}
+			},
+			Expect: S{
+				ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }},
+			},
+		})
 
 	s.TestOKPrepare(t, "overwrite_unknown_field_level2",
 		`{"name":"Root", "recurse":{"L2": {"fuzz":"inexistent"}}}`,
-		func() S { return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}} },
-		S{ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }}})
+		Test[S]{
+			PrepareJscan: func() S {
+				return S{ID: "root", Recurse: map[string]S{"L2": {ID: "level2"}}}
+			},
+			Expect: S{
+				ID: "root", Name: "Root", Recurse: map[string]S{"L2": { /* empty */ }},
+			},
+		})
 
 	s.testErr(t, "wrong_type_level2", `{"id":"root","recurse":[]}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 23})
@@ -2587,12 +2841,18 @@ func TestDecodeMapIntToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "-123456789":123456789}`,
 		M{0: 0, 42: 42, -123456789: 123456789})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2618,12 +2878,18 @@ func TestDecodeMapInt8ToString(t *testing.T) {
 	s.TestOK(t, "min_and_max", `{"0":0, "-128":-128, "127":127}`,
 		M{0: 0, -128: -128, 127: 127})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow_hi", `{"128":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2649,12 +2915,18 @@ func TestDecodeMapInt16ToString(t *testing.T) {
 	s.TestOK(t, "min_and_max", `{"0":0, "-32768":-32768, "32767":32767}`,
 		M{0: 0, -32768: -32768, 32767: 32767})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow_hi", `{"32768":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2681,12 +2953,18 @@ func TestDecodeMapInt32ToString(t *testing.T) {
 		"-2147483648":-2147483648, "2147483647":2147483647}`,
 		M{0: 0, -2147483648: -2147483648, 2147483647: 2147483647})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow_hi", `{"2147483648":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2718,12 +2996,18 @@ func TestDecodeMapInt64ToString(t *testing.T) {
 			9223372036854775807:  9223372036854775807,
 		})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow_hi", `{"9223372036854775808":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2749,12 +3033,18 @@ func TestDecodeMapUintToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
 		M{0: 0, 42: 42, 18446744073709551615: 1})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2780,12 +3070,18 @@ func TestDecodeMapUint8ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "255":1}`,
 		M{0: 0, 42: 42, 255: 1})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow", `{"256":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2811,12 +3107,18 @@ func TestDecodeMapUint16ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "65535":1}`,
 		M{0: 0, 42: 42, 65535: 1})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow", `{"65536":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2842,12 +3144,18 @@ func TestDecodeMapUint32ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "4294967295":1}`,
 		M{0: 0, 42: 42, 4294967295: 1})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow", `{"4294967296":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2873,12 +3181,18 @@ func TestDecodeMapUint64ToString(t *testing.T) {
 	s.TestOK(t, "positive_and_negative", `{"0":0, "42":42, "18446744073709551615":1}`,
 		M{0: 0, 42: 42, 18446744073709551615: 1})
 
-	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 20})
-	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 10, 2: 42})
-	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`,
-		func() M { return M{1: 10, 2: 20} }, M{1: 42, 2: 42, 3: 42})
+	s.TestOKPrepare(t, "overwrite_1", `{"1": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 20},
+	})
+	s.TestOKPrepare(t, "overwrite_2", `{"2": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 10, 2: 42},
+	})
+	s.TestOKPrepare(t, "overwrite_all", `{"2": 42, "1": 42, "3": 42}`, Test[M]{
+		PrepareJscan: func() M { return M{1: 10, 2: 20} },
+		Expect:       M{1: 42, 2: 42, 3: 42},
+	})
 
 	s.testErr(t, "overflow", `{"18446744073709551616":0}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 1})
@@ -2936,16 +3250,29 @@ func TestDecodeMapStringToMapStringToString(t *testing.T) {
 	s.TestOK(t, "escaped",
 		`{" \b " : {" \" ":" \u30C4 "} }`, M{" \b ": M2{` " `: ` ツ `}})
 
-	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
-		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
-		M{"a": {}, "b": {"b1": "b1_v"}})
-	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"a2":"NEWVAL"}}`,
-		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
-		M{"a": {"a2": "NEWVAL"}, "b": {"b1": "b1_v"}})
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}}
+		},
+		Expect: M{"a": {}, "b": {"b1": "b1_v"}},
+	})
+	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"a2":"NEWVAL"}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}}
+		},
+		Expect: M{"a": {"a2": "NEWVAL"}, "b": {"b1": "b1_v"}},
+	})
 	s.TestOKPrepare(t, "overwrite_all",
 		`{"a": {"a2":"NEWVAL1","a1":"NEWVAL2"}, "b": {"b1": "NEWVAL3", "bNEW": "NV3"} }`,
-		func() M { return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}} },
-		M{"a": {"a1": "NEWVAL2", "a2": "NEWVAL1"}, "b": {"b1": "NEWVAL3", "bNEW": "NV3"}})
+		Test[M]{
+			PrepareJscan: func() M {
+				return M{"a": {"a1": "a1_b", "a2": "a2_v"}, "b": {"b1": "b1_v"}}
+			},
+			Expect: M{
+				"a": {"a1": "NEWVAL2", "a2": "NEWVAL1"},
+				"b": {"b1": "NEWVAL3", "bNEW": "NV3"},
+			},
+		})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -2984,21 +3311,49 @@ func TestDecodeMapStringToStruct(t *testing.T) {
 			"y": S{Name: "second", ID: 2},
 		})
 
-	s.TestOKPrepare(t, "overwrite_null", `null`,
-		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
-		M(nil))
-	s.TestOKPrepare(t, "no_overwrite_empty", `{}`,
-		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
-		M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}})
-	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"id":3, "name":"Bob"}}`,
-		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
-		M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}, "c": {Name: "Bob", ID: 3}})
-	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
-		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
-		M{"a": {}, "b": {Name: "b1", ID: 2}})
-	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"id":42}}`,
-		func() M { return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}} },
-		M{"a": {ID: 42}, "b": {Name: "b1", ID: 2}})
+	s.TestOKPrepare(t, "overwrite_null", `null`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}}
+		},
+		Expect: M(nil),
+	})
+	s.TestOKPrepare(t, "no_overwrite_empty", `{}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{
+				"a": {Name: "a1", ID: 1},
+				"b": {Name: "b1", ID: 2},
+			}
+		},
+		Expect: M{
+			"a": {Name: "a1", ID: 1},
+			"b": {Name: "b1", ID: 2},
+		},
+	})
+	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"id":3, "name":"Bob"}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{
+				"a": {Name: "a1", ID: 1},
+				"b": {Name: "b1", ID: 2},
+			}
+		},
+		Expect: M{
+			"a": {Name: "a1", ID: 1},
+			"b": {Name: "b1", ID: 2},
+			"c": {Name: "Bob", ID: 3},
+		},
+	})
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}}
+		},
+		Expect: M{"a": {}, "b": {Name: "b1", ID: 2}},
+	})
+	s.TestOKPrepare(t, "overwrite_a_partially", `{"a": {"id":42}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {Name: "a1", ID: 1}, "b": {Name: "b1", ID: 2}}
+		},
+		Expect: M{"a": {ID: 42}, "b": {Name: "b1", ID: 2}},
+	})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -3034,21 +3389,28 @@ func TestDecodeMapStringStruct512(t *testing.T) {
 			"y": S{Data: D{0: 3, 1: 4}},
 		})
 
-	s.TestOKPrepare(t, "overwrite_null", `null`,
-		func() M { return M{"a": S{Data: D{0}}, "b": {Data: D{0}}} },
-		M(nil))
-	s.TestOKPrepare(t, "no_overwrite_empty", `{}`,
-		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
-		M{"a": {Data: D{0}}, "b": {Data: D{1}}})
-	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"data":[1]}}`,
-		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{0}}} },
-		M{"a": {Data: D{0}}, "b": {Data: D{0}}, "c": {Data: D{1}}})
-	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`,
-		func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
-		M{"a": {}, "b": {Data: D{1}}})
-	s.TestOKPrepare(t, "overwrite_a", `{"a": {"data":[9,9]}}`,
-		func() M { return M{"a": {Data: D{0, 1, 2, 3, 4, 5}}, "b": {Data: D{1}}} },
-		M{"a": {Data: D{9, 9}}, "b": {Data: D{1}}})
+	s.TestOKPrepare(t, "overwrite_null", `null`, Test[M]{
+		PrepareJscan: func() M { return M{"a": S{Data: D{0}}, "b": {Data: D{0}}} },
+		Expect:       M(nil),
+	})
+	s.TestOKPrepare(t, "no_overwrite_empty", `{}`, Test[M]{
+		PrepareJscan: func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
+		Expect:       M{"a": {Data: D{0}}, "b": {Data: D{1}}},
+	})
+	s.TestOKPrepare(t, "no_overwrite_new", `{"c":{"data":[1]}}`, Test[M]{
+		PrepareJscan: func() M { return M{"a": {Data: D{0}}, "b": {Data: D{0}}} },
+		Expect:       M{"a": {Data: D{0}}, "b": {Data: D{0}}, "c": {Data: D{1}}},
+	})
+	s.TestOKPrepare(t, "overwrite_a_empty", `{"a": {}}`, Test[M]{
+		PrepareJscan: func() M { return M{"a": {Data: D{0}}, "b": {Data: D{1}}} },
+		Expect:       M{"a": {}, "b": {Data: D{1}}},
+	})
+	s.TestOKPrepare(t, "overwrite_a", `{"a": {"data":[9,9]}}`, Test[M]{
+		PrepareJscan: func() M {
+			return M{"a": {Data: D{0, 1, 2, 3, 4, 5}}, "b": {Data: D{1}}}
+		},
+		Expect: M{"a": {Data: D{9, 9}}, "b": {Data: D{1}}},
+	})
 
 	s.testErr(t, "int", `1`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
@@ -3325,4 +3687,84 @@ func TestMemReuse(t *testing.T) {
 		require.Equal(t, S{"first", "second", "third"}, v1)
 		require.Equal(t, S{"FIRST", "SECOND", "THIRD"}, v2)
 	})
+}
+
+// TestDecodeNumber tests jscandec.Number, which can't be tested with a normal test
+// because encoding/json.Number and jscandec.Number are different types
+// and encoding/json fails to unmarshal it the same way.
+func TestDecodeNumber(t *testing.T) {
+	s := newTestSetup[jscandec.Number](t, *jscandec.DefaultOptions)
+
+	testOK := func(name, input string, expect jscandec.Number) {
+		s.TestOKPrepare(t, name, input, Test[jscandec.Number]{
+			PrepareEncodingjson: func() any { x := json.Number(""); return &x },
+			Check: func(t *testing.T, vJscan jscandec.Number, vEncodingJson any) {
+				require.Equal(t, string(*vEncodingJson.(*json.Number)), string(vJscan))
+			},
+			Expect: expect,
+		})
+	}
+
+	testOK("null", `null`, "")
+	testOK("0", `0`, "0")
+	testOK("1", `1`, "1")
+	testOK("-1", `-1`, "-1")
+	testOK("int32_min", `-2147483648`, "-2147483648")
+	testOK("int32_max", `2147483647`, "2147483647")
+	testOK("int64_min", `-9223372036854775808`, "-9223372036854775808")
+	testOK("int64_max", `9223372036854775807`, "9223372036854775807")
+	testOK("overflow64_hi", `9223372036854775808`, "9223372036854775808")
+	testOK("overflow64_lo", `-9223372036854775809`, "-9223372036854775809")
+	testOK("bigint", `123456789012345678901234567890123456789012345678901234567890`,
+		"123456789012345678901234567890123456789012345678901234567890")
+	testOK("0.1", `0.1`, "0.1")
+	testOK("-0.1", `-0.1`, "-0.1")
+	testOK("bigdec",
+		`1234567890123456789012345678901234567890123456789012345678901234567890.0`,
+		"1234567890123456789012345678901234567890123456789012345678901234567890.0")
+	testOK("bigdec_after_comma",
+		`0.1234567890123456789012345678901234567890123456789012345678901234567890`,
+		"0.1234567890123456789012345678901234567890123456789012345678901234567890")
+	testOK("bigdec_after_comma",
+		`1234567890123456789012345678901234567890.123456789012345678901234567890`,
+		"1234567890123456789012345678901234567890.123456789012345678901234567890")
+	testOK("exponent", `1234e1234`, "1234e1234")
+	testOK("exponent_uppercase", `1234E1234`, "1234E1234")
+	testOK("exponent_neg", `1234E-1234`, "1234E-1234")
+
+	testOK("str_0", `"0"`, "0")
+	testOK("str_1", `"1"`, "1")
+	testOK("str_-1", `"-1"`, "-1")
+	testOK("str_int32_min", `"-2147483648"`, "-2147483648")
+	testOK("str_int32_max", `"2147483647"`, "2147483647")
+	testOK("str_int64_min", `"-9223372036854775808"`, "-9223372036854775808")
+	testOK("str_int64_max", `"9223372036854775807"`, "9223372036854775807")
+	testOK("str_overflow64_hi", `"9223372036854775808"`, "9223372036854775808")
+	testOK("str_overflow64_lo", `"-9223372036854775809"`, "-9223372036854775809")
+	testOK("str_bigint",
+		`"123456789012345678901234567890123456789012345678901234567890"`,
+		"123456789012345678901234567890123456789012345678901234567890")
+	testOK("str_0.1", `"0.1"`, "0.1")
+	testOK("str_-0.1", `"-0.1"`, "-0.1")
+	testOK("str_bigdec",
+		`"1234567890123456789012345678901234567890123456789012345678901234567890.0"`,
+		"1234567890123456789012345678901234567890123456789012345678901234567890.0")
+	testOK("str_bigdec_after_comma",
+		`"0.1234567890123456789012345678901234567890123456789012345678901234567890"`,
+		"0.1234567890123456789012345678901234567890123456789012345678901234567890")
+	testOK("str_bigdec_after_comma",
+		`"1234567890123456789012345678901234567890.123456789012345678901234567890"`,
+		"1234567890123456789012345678901234567890.123456789012345678901234567890")
+	testOK("str_exponent", `"1234e1234"`, "1234e1234")
+	testOK("str_exponent_uppercase", `"1234E1234"`, "1234E1234")
+	testOK("str_exponent_neg", `"1234E-1234"`, "1234E-1234")
+
+	s.testErr(t, "true", `true`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "false", `false`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "array", `[]`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+	s.testErr(t, "object", `{}`,
+		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 }
