@@ -3700,6 +3700,7 @@ func TestDecodeNumber(t *testing.T) {
 			PrepareEncodingjson: func() any { x := json.Number(""); return &x },
 			Check: func(t *testing.T, vJscan jscandec.Number, vEncodingJson any) {
 				require.Equal(t, string(*vEncodingJson.(*json.Number)), string(vJscan))
+				require.Equal(t, expect.String(), vJscan.String())
 			},
 			Expect: expect,
 		})
@@ -3767,4 +3768,50 @@ func TestDecodeNumber(t *testing.T) {
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
 	s.testErr(t, "object", `{}`,
 		jscandec.ErrorDecode{Err: jscandec.ErrUnexpectedValue, Index: 0})
+
+	testOKInt64 := func(name, input string, expect int64) {
+		s.TestOKPrepare(t, name, input, Test[jscandec.Number]{
+			PrepareEncodingjson: func() any { x := json.Number(""); return &x },
+			Check: func(t *testing.T, vJscan jscandec.Number, vEncodingJson any) {
+				require.Equal(t, string(*vEncodingJson.(*json.Number)), string(vJscan))
+				a, err := vJscan.Int64()
+				require.NoError(t, err)
+				require.Equal(t, expect, a)
+			},
+		})
+	}
+
+	testOKInt64("int64_0", `0`, 0)
+	testOKInt64("int64_-123", `-123`, -123)
+	testOKInt64("int64_min", `-9223372036854775808`, math.MinInt64)
+	testOKInt64("int64_min", `9223372036854775807`, math.MaxInt64)
+	testOKInt64("str_int64_0", `"0"`, 0)
+	testOKInt64("str_int64_-123", `"-123"`, -123)
+	testOKInt64("str_int64_min", `"-9223372036854775808"`, math.MinInt64)
+	testOKInt64("str_int64_min", `"9223372036854775807"`, math.MaxInt64)
+
+	testOKFloat64 := func(name, input string, expect float64) {
+		s.TestOKPrepare(t, name, input, Test[jscandec.Number]{
+			PrepareEncodingjson: func() any { x := json.Number(""); return &x },
+			Check: func(t *testing.T, vJscan jscandec.Number, vEncodingJson any) {
+				require.Equal(t, string(*vEncodingJson.(*json.Number)), string(vJscan))
+				a, err := vJscan.Float64()
+				require.NoError(t, err)
+				require.Equal(t, expect, a)
+			},
+		})
+	}
+
+	testOKFloat64("float64_0", `0`, 0)
+	testOKFloat64("float64_-123", `-123`, -123)
+	testOKFloat64("float64_min", `-9223372036854775808`, math.MinInt64)
+	testOKFloat64("float64_min", `9223372036854775807`, math.MaxInt64)
+	testOKFloat64("float64_1e24", `1e24`, 1e24)
+	testOKFloat64("float64_pi", `3.14159`, 3.14159)
+	testOKFloat64("str_float64_0", `"0"`, 0)
+	testOKFloat64("str_float64_-123", `"-123"`, -123)
+	testOKFloat64("str_float64_min", `"-9223372036854775808"`, math.MinInt64)
+	testOKFloat64("str_float64_min", `"9223372036854775807"`, math.MaxInt64)
+	testOKFloat64("str_float64_1e24", `"1e24"`, 1e24)
+	testOKFloat64("str_float64_pi", `"3.14159"`, 3.14159)
 }
