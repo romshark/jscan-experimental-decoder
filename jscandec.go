@@ -684,6 +684,39 @@ type DecodeOptions struct {
 	// DisallowUnknownFields will make Decode return ErrUnknownField
 	// when encountering an unknown struct field.
 	DisallowUnknownFields bool
+
+	// DisableFieldNameUnescaping disables unescaping of struct field names
+	// before matching which is enabled by default as a backward-compatibility feature
+	// of encoding/json.
+	//
+	// For example, the following JSON input:
+	//
+	//   `{ "\u0069\u0064": "value" }`
+	//
+	// will match field ID in the following type:
+	//
+	//   struct { ID string `json:"id"` }
+	//
+	// because "\u0069\u0064" is first unescaped to "id" before matching.
+	// DisableFieldNameUnescaping=true disables this behavior and will treat
+	// property "\u0069\u0064" as an unknown field instead.
+	DisableFieldNameUnescaping bool
+
+	// DisableCaseInsensitiveMatching will disable case-insensitive struct field
+	// matching that's enabled by default as a backward-compatibility feature
+	// of encoding/json.
+	//
+	// For example, the following JSON input:
+	//
+	//   `{ "A": 42 }`
+	//
+	// will match field A in the following type:
+	//
+	//   struct { A int `json:"a"` }
+	//
+	// DisableCaseInsensitiveMatching=true disables this behavior and will treat
+	// property "A" as an unknown field instead.
+	DisableCaseInsensitiveMatching bool
 }
 
 // Decode unmarshals the JSON contents of s into t.
@@ -2495,10 +2528,44 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeStruct, ExpectTypeStructRecur:
 				SCAN_KEYVALS:
 					for {
-						key := unescape.Valid[S, S](
-							s[tokens[ti].Index+1 : tokens[ti].End-1],
-						)
-						frameIndex := fieldFrameIndexByName(d.stackExp[si].Fields, key)
+						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
+						if !options.DisableFieldNameUnescaping {
+							key = unescape.Valid[S, S](key)
+						}
+						frameIndex := uint32(noParentFrame)
+						if options.DisableCaseInsensitiveMatching {
+							fields := d.stackExp[si].Fields
+							{ // Check for exact matches first
+								// Try 4 at a time if enough are left
+								for ; len(fields) >= 4; fields = fields[4:] {
+									if string(fields[0].Name) == string(key) {
+										frameIndex = fields[0].FrameIndex
+										goto PROCEED
+									}
+									if string(fields[1].Name) == string(key) {
+										frameIndex = fields[1].FrameIndex
+										goto PROCEED
+									}
+									if string(fields[2].Name) == string(key) {
+										frameIndex = fields[2].FrameIndex
+										goto PROCEED
+									}
+									if string(fields[3].Name) == string(key) {
+										frameIndex = fields[3].FrameIndex
+										goto PROCEED
+									}
+								}
+								for i := range fields {
+									if string(fields[i].Name) == string(key) {
+										frameIndex = fields[i].FrameIndex
+										break
+									}
+								}
+							}
+						} else {
+							frameIndex = fieldFrameIndexByName(d.stackExp[si].Fields, key)
+						}
+					PROCEED:
 						if frameIndex == noParentFrame {
 							if options.DisallowUnknownFields {
 								err = ErrorDecode{

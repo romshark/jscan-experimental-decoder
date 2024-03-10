@@ -3815,3 +3815,114 @@ func TestDecodeNumber(t *testing.T) {
 	testOKFloat64("str_float64_1e24", `"1e24"`, 1e24)
 	testOKFloat64("str_float64_pi", `"3.14159"`, 3.14159)
 }
+
+func TestDisableFieldNameUnescaping(t *testing.T) {
+	type S struct {
+		ID string `json:"id"`
+	}
+	s := newTestSetup[S](t, jscandec.DecodeOptions{
+		DisableFieldNameUnescaping: true,
+	})
+
+	s.TestOK(t, "no_unescaping", `{"id":"ok"}`, S{ID: "ok"})
+	s.TestOK(t, "no_unescaping_case_insensitive_match", `{"ID":"ok"}`, S{ID: "ok"})
+	s.TestOKPrepare(t, "escaped_treat_as_unknown", `{"\u0069\u0064":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable unescaping of field names.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+	s.TestOKPrepare(t, "escaped_case_insensitive", `{"\u0049\u0044":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable unescaping of field names.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+}
+
+func TestEscapedStructTag(t *testing.T) {
+	type S struct {
+		ID string `json:"\u0069\u0064"`
+	}
+	s := newTestSetup[S](t, *jscandec.DefaultOptions)
+
+	s.TestOK(t, "no_unescaping", `{"\u0069\u0064":"ok"}`, S{ID: "ok"})
+}
+
+// TestDisableFieldNameUnescapingNoTag is same as TestDisableFieldNameUnescaping
+// but with no struct tags involved.
+func TestDisableFieldNameUnescapingNoTag(t *testing.T) {
+	type S struct{ ID string }
+	s := newTestSetup[S](t, jscandec.DecodeOptions{
+		DisableFieldNameUnescaping: true,
+	})
+
+	s.TestOK(t, "no_unescaping", `{"ID":"ok"}`, S{ID: "ok"})
+	s.TestOK(t, "no_unescaping_case_insensitive_match", `{"id":"ok"}`, S{ID: "ok"})
+	s.TestOKPrepare(t, "escaped_treat_as_unknown", `{"\u0049\u0044":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable unescaping of field names.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+	s.TestOKPrepare(t, "escaped_case_insensitive", `{"\u0069\u0064":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable unescaping of field names.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+}
+
+func TestDisableCaseInsensitiveMatching(t *testing.T) {
+	type S struct {
+		ID string `json:"id"`
+	}
+	s := newTestSetup[S](t, jscandec.DecodeOptions{
+		DisableCaseInsensitiveMatching: true,
+	})
+
+	s.TestOK(t, "exact_match", `{"id":"ok"}`, S{ID: "ok"})
+	s.TestOKPrepare(t, "no_match_treat_as_unknown", `{"ID":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable case-insensitive matching.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+	s.TestOKPrepare(t, "no_match_mixed", `{"Id":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable case-insensitive matching.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+}
+
+// TestDisableCaseInsensitiveMatchingNoTag is same as TestDisableCaseInsensitiveMatching
+// but with no struct tags involved.
+func TestDisableCaseInsensitiveMatchingNoTag(t *testing.T) {
+	type S struct{ ID string }
+	s := newTestSetup[S](t, jscandec.DecodeOptions{
+		DisableCaseInsensitiveMatching: true,
+	})
+
+	s.TestOK(t, "exact_match", `{"ID":"ok"}`, S{ID: "ok"})
+	s.TestOKPrepare(t, "no_match_treat_as_unknown", `{"id":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable case-insensitive matching.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+	s.TestOKPrepare(t, "no_match_mixed", `{"Id":"not ok"}`, Test[S]{
+		Check: func(t *testing.T, vJscan S, vEncodingJson any) {
+			require.Equal(t, S{}, vJscan) // Ignore unknown field
+			// encoding/json doesn't have an option to disable case-insensitive matching.
+			require.Equal(t, &S{ID: "not ok"}, vEncodingJson)
+		},
+	})
+}

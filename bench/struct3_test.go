@@ -22,9 +22,9 @@ import (
 
 func TestImplementationsStruct3(t *testing.T) {
 	in := `{
-		"name":"Test name",
+		"name":   "Test name",
 		"number": 100553,
-		"tags": ["sports", "portable"]
+		"tags":   ["sports", "portable"]
 	}`
 	expect := func() bench.Struct3 {
 		return bench.Struct3{
@@ -54,7 +54,8 @@ func TestImplementationsStruct3(t *testing.T) {
 
 	t.Run("unmr/jsonv2", func(t *testing.T) {
 		var v bench.Struct3
-		require.NoError(t, jsonv2.Unmarshal([]byte(in), &v))
+		opts := jsonv2.MatchCaseInsensitiveNames(false)
+		require.NoError(t, jsonv2.Unmarshal([]byte(in), &v, opts))
 		require.Equal(t, expect(), v)
 	})
 
@@ -66,11 +67,16 @@ func TestImplementationsStruct3(t *testing.T) {
 
 	t.Run("unmr/jscan", func(t *testing.T) {
 		d, err := jscandec.NewDecoder[[]byte, bench.Struct3](
-			jscan.NewTokenizer[[]byte](32, len(in)/2), jscandec.DefaultInitOptions,
+			jscan.NewTokenizer[[]byte](32, 128), jscandec.DefaultInitOptions,
 		)
+		// Disable unescaping and insensitive field matching for maximum performance.
+		opts := &jscandec.DecodeOptions{
+			DisableFieldNameUnescaping:     true,
+			DisableCaseInsensitiveMatching: true,
+		}
 		require.NoError(t, err)
 		var v bench.Struct3
-		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
+		if err := d.Decode([]byte(in), &v, opts); err.IsErr() {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -118,9 +124,9 @@ func TestImplementationsStruct3(t *testing.T) {
 
 func BenchmarkDecodeStruct3(b *testing.B) {
 	in := []byte(`{
-		"name":"Test name",
+		"name":   "Test name",
 		"number": 100553,
-		"tags": ["sports", "portable"]
+		"tags":   ["sports", "portable"]
 	}`)
 
 	b.Run("unmr/encoding_json", func(b *testing.B) {
@@ -151,9 +157,11 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 	})
 
 	b.Run("unmr/jsonv2", func(b *testing.B) {
+		opts := jsonv2.MatchCaseInsensitiveNames(false)
+		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v bench.Struct3
-			if err := jsonv2.Unmarshal(in, &v); err != nil {
+			if err := jsonv2.Unmarshal(in, &v, opts); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -176,10 +184,15 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		var v bench.Struct3
+		// Disable unescaping and insensitive field matching for maximum performance.
+		opts := &jscandec.DecodeOptions{
+			DisableFieldNameUnescaping:     true,
+			DisableCaseInsensitiveMatching: true,
+		}
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
-			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
+			var v bench.Struct3
+			if err := d.Decode(in, &v, opts); err.IsErr() {
 				b.Fatal(err)
 			}
 		}
