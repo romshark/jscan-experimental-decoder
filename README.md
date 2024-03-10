@@ -30,7 +30,7 @@ Roadmap:
 - [x] JSON struct tags
     - [x] Case-insensitive key matching (backward-compatibility feature of `encoding/json`)
     - [x] Option `DisallowUnknownFields`
-    - [x] Option `DisableFieldNameUnescapingNoTag`
+    - [x] Option `DisableFieldNameUnescaping`
     - [x] Option `DisableCaseInsensitiveMatching`
     - [ ] Option `DisallowDuplicateNames`
     - [x] Struct tag option `string`
