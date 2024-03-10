@@ -28,9 +28,12 @@ Roadmap:
     - [x] `encoding.TextUnmarshaler` keys
     - [x] Integer keys
 - [x] JSON struct tags
+    - [x] Case-insensitive key matching (backward-compatibility feature of `encoding/json`)
     - [x] Option `DisallowUnknownFields`
-    - [x] Case-insensitive key matching
-    - [x] Option `string`
+    - [x] Option `DisableFieldNameUnescapingNoTag`
+    - [x] Option `DisableCaseInsensitiveMatching`
+    - [ ] Option `DisallowDuplicateNames`
+    - [x] Struct tag option `string`
 - [x] Pointers
 - [x] Type `Unmarshaler interface { UnmarshalJSON([]byte) error }`
 - [x] Type `TextUnmarshaler interface { UnmarshalText(text []byte) error }`
