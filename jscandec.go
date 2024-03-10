@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"strconv"
@@ -28,6 +29,24 @@ var (
 	ErrIntegerOverflow = errors.New("integer overflow")
 )
 
+// Number represents a JSON number literal.
+type Number string
+
+// // String returns the literal text of the number.
+// func (n Number) String() string { return string(n) }
+
+// // Float64 returns the number as a float64.
+// func (n Number) Float64() (float64, error) {
+// 	return strconv.ParseFloat(string(n), 64)
+// }
+
+// // Int64 returns the number as an int64.
+// func (n Number) Int64() (int64, error) {
+// 	return strconv.ParseInt(string(n), 10, 64)
+// }
+
+var tpNumber = reflect.TypeOf(Number(""))
+
 type ErrorDecode struct {
 	Err      error
 	Expected ExpectType
@@ -49,6 +68,9 @@ type ExpectType int8
 
 const (
 	_ ExpectType = iota
+
+	// ExpectTypeNumber is the type `jscandec.Number`
+	ExpectTypeNumber
 
 	// ExpectTypeJSONUnmarshaler is any type that implements
 	// the encoding/json.Unmarshaler interface
@@ -229,6 +251,8 @@ const (
 
 func (t ExpectType) String() string {
 	switch t {
+	case ExpectTypeNumber:
+		return "jscandec.Number"
 	case ExpectTypeJSONUnmarshaler:
 		return "interface{UnmarshalJSON([]byte)error}"
 	case ExpectTypeTextUnmarshaler:
@@ -735,11 +759,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				goto ON_VAL_END
 
 			case jscan.TokenTypeInteger:
+				p := unsafe.Pointer(
+					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+				)
 				switch d.stackExp[si].Type {
 				case ExpectTypeAny:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
 					var su string
@@ -775,9 +799,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					} else {
-						p := unsafe.Pointer(
-							uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-						)
 						*(*uint)(p) = i
 					}
 
@@ -790,16 +811,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						return true
 					} else {
-						p := unsafe.Pointer(
-							uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-						)
 						*(*int)(p) = i
 					}
 
 				case ExpectTypeUint8:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -819,9 +834,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*uint8)(p) = v
 
 				case ExpectTypeUint16:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -841,9 +853,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*uint16)(p) = v
 
 				case ExpectTypeUint32:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -863,9 +872,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*uint32)(p) = v
 
 				case ExpectTypeUint64:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if s[tokens[ti].Index] == '-' {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
@@ -885,9 +891,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*uint64)(p) = v
 
 				case ExpectTypeInt8:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, overflow := atoi.I8(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 8-bit signed integer
@@ -900,9 +903,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*int8)(p) = v
 
 				case ExpectTypeInt16:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, overflow := atoi.I16(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 16-bit signed integer
@@ -915,9 +915,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*int16)(p) = v
 
 				case ExpectTypeInt32:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, overflow := atoi.I32(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 32-bit signed integer
@@ -930,9 +927,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*int32)(p) = v
 
 				case ExpectTypeInt64:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, overflow := atoi.I64(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 64-bit signed integer
@@ -945,9 +939,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*int64)(p) = v
 
 				case ExpectTypeFloat32:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if tokens[ti].End-tokens[ti].Index < len("16777216") {
 						// Numbers below this length are guaranteed to be smaller 1<<24
 						// And float32(i32) is faster than calling parseFloat32
@@ -967,9 +958,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 
 				case ExpectTypeFloat64:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					if tokens[ti].End-tokens[ti].Index < len("9007199254740992") {
 						// Numbers below this length are guaranteed to be smaller 1<<53
 						// And float64(i64) is faster than calling parseFloat64
@@ -988,6 +976,9 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						*(*float64)(p) = v
 					}
 
+				case ExpectTypeNumber:
+					*(*Number)(p) = Number(s[tokens[ti].Index:tokens[ti].End])
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -999,11 +990,11 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				goto ON_VAL_END
 
 			case jscan.TokenTypeNumber:
+				p := unsafe.Pointer(
+					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+				)
 				switch d.stackExp[si].Type {
 				case ExpectTypeAny:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					tv := s[tokens[ti].Index:tokens[ti].End]
 					var sz S
 					var su string
@@ -1024,9 +1015,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*any)(p) = v
 
 				case ExpectTypeFloat32:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
@@ -1034,15 +1022,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					*(*float32)(p) = v
 				case ExpectTypeFloat64:
-					p := unsafe.Pointer(
-						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-					)
 					v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
 						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
 						return true
 					}
 					*(*float64)(p) = v
+				case ExpectTypeNumber:
+					*(*Number)(p) = Number(s[tokens[ti].Index:tokens[ti].End])
 				default:
 					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
 					return true
@@ -1119,6 +1106,18 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						return true
 					}
 					*(*string)(p) = string(val)
+
+				case ExpectTypeNumber:
+					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
+					fmt.Printf("FUCK: %q", string(tv))
+					if _, rc := jsonnum.ReadNumber(tv); rc == jsonnum.ReturnCodeErr {
+						err = ErrorDecode{
+							Err:   ErrUnexpectedValue,
+							Index: tokens[ti].Index,
+						}
+						return true
+					}
+					*(*Number)(p) = Number(tv)
 
 				case ExpectTypeFloat32String:
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
@@ -1349,7 +1348,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					return true
 				}
-				// This will either copy from a byte slice or create a substring
+				// This will either copy from a byte slice or create a sub-
 				ti++
 				goto ON_VAL_END
 
@@ -1377,6 +1376,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*bool)(p) = zeroBool
 				case ExpectTypeStr:
 					*(*string)(p) = zeroStr
+				case ExpectTypeNumber:
+					*(*Number)(p) = ""
 				case ExpectTypeFloat32:
 					*(*float32)(p) = zeroFloat32
 				case ExpectTypeFloat64:
