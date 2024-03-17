@@ -5,7 +5,6 @@ import (
 	"encoding"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"reflect"
 	"strconv"
@@ -1142,7 +1141,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeNumber:
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
-					fmt.Printf("FUCK: %q", string(tv))
 					if _, rc := jsonnum.ReadNumber(tv); rc == jsonnum.ReturnCodeErr {
 						err = ErrorDecode{
 							Err:   ErrUnexpectedValue,
