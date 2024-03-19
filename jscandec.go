@@ -748,24 +748,6 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	errTok := d.tokenizer.Tokenize(s, func(tokens []jscan.Token[S]) (exit bool) {
 		// ti stands for the token index and points at the current token
 		for ti := 0; ti < len(tokens); {
-			switch d.stackExp[si].Type {
-			case ExpectTypePtr:
-				p := unsafe.Pointer(
-					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
-				)
-				si++
-				if d.stackExp[si].Size == 0 {
-					*(*unsafe.Pointer)(p) = emptyStructAddr
-				} else {
-					dp := mallocgc(d.stackExp[si].Size, d.stackExp[si].Typ, true)
-					d.stackExp[si].Dest = dp
-					*(*unsafe.Pointer)(p) = dp
-				}
-				continue
-
-			case ExpectTypeJSONUnmarshaler:
-				goto ON_JSON_UNMARSHALER
-			}
 			switch tokens[ti].Type {
 			case jscan.TokenTypeFalse, jscan.TokenTypeTrue:
 				switch d.stackExp[si].Type {
@@ -780,6 +762,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
 					)
 					*(*bool)(p) = tokens[ti].Type == jscan.TokenTypeTrue
+				case ExpectTypePtr:
+					goto ON_PTR
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -1011,6 +997,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeNumber:
 					*(*Number)(p) = Number(s[tokens[ti].Index:tokens[ti].End])
 
+				case ExpectTypePtr:
+					goto ON_PTR
+
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -1062,6 +1054,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*float64)(p) = v
 				case ExpectTypeNumber:
 					*(*Number)(p) = Number(s[tokens[ti].Index:tokens[ti].End])
+				case ExpectTypePtr:
+					goto ON_PTR
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
 				default:
 					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
 					return true
@@ -1372,6 +1368,10 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						return true
 					}
 					*(*uint64)(p) = v
+				case ExpectTypePtr:
+					goto ON_PTR
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -1461,6 +1461,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*[]uint32)(p) = nil
 				case ExpectTypeSliceUint64:
 					*(*[]uint64)(p) = nil
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
 				}
 				ti++
 				goto ON_VAL_END
@@ -2340,6 +2342,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					*(*[]float64)(p) = sl
 					goto ON_VAL_END
 
+				case ExpectTypePtr:
+					goto ON_PTR
+
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
+
 				default:
 					err = ErrorDecode{
 						Err:   ErrUnexpectedValue,
@@ -2512,6 +2520,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						d.stackExp[d.stackExp[si].Fields[i].FrameIndex].Dest = p
 					}
 					ti++
+
+				case ExpectTypePtr:
+					goto ON_PTR
+
+				case ExpectTypeJSONUnmarshaler:
+					goto ON_JSON_UNMARSHALER
 
 				default:
 					err = ErrorDecode{
@@ -2999,6 +3013,22 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 			}
 			continue
 
+		ON_PTR:
+			{
+				p := unsafe.Pointer(
+					uintptr(d.stackExp[si].Dest) + d.stackExp[si].Offset,
+				)
+				si++
+				if d.stackExp[si].Size == 0 {
+					*(*unsafe.Pointer)(p) = emptyStructAddr
+				} else {
+					dp := mallocgc(d.stackExp[si].Size, d.stackExp[si].Typ, true)
+					d.stackExp[si].Dest = dp
+					*(*unsafe.Pointer)(p) = dp
+				}
+			}
+			continue
+
 		ON_JSON_UNMARSHALER:
 			{
 				p := unsafe.Pointer(
@@ -3024,8 +3054,8 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					return true
 				}
-				goto ON_VAL_END
 			}
+			goto ON_VAL_END
 		}
 		return false
 	})
