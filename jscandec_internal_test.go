@@ -1,7 +1,6 @@
 package jscandec
 
 import (
-	_ "embed"
 	"encoding"
 	"encoding/json"
 	"fmt"
