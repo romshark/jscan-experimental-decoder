@@ -9,7 +9,6 @@ import (
 	"github.com/romshark/jscan-experimental-decoder/bench"
 	"github.com/romshark/jscan-experimental-decoder/bench/easyjsongen"
 	"github.com/romshark/jscan-experimental-decoder/bench/ffjsongen"
-	segmentio "github.com/segmentio/encoding/json"
 
 	jsonv2 "github.com/go-json-experiment/json"
 	goccy "github.com/goccy/go-json"
@@ -17,6 +16,7 @@ import (
 	easyjson "github.com/mailru/easyjson"
 	ffjson "github.com/pquerna/ffjson/ffjson"
 	jscan "github.com/romshark/jscan/v2"
+	segmentio "github.com/segmentio/encoding/json"
 	"github.com/stretchr/testify/require"
 )
 
