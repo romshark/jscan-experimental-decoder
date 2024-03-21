@@ -462,7 +462,7 @@ type stackFrame[S []byte | string] struct {
 
 // noParentFrame uses math.MaxUint32 because the length of the decoder stack
 // is very unlikely to reach 4_294_967_295.
-const noParentFrame = math.MaxUint32
+const noParentFrame = uint32(math.MaxUint32)
 
 // DefaultInitOptions are to be used by default. DO NOT MUTATE.
 var DefaultInitOptions = &InitOptions{
