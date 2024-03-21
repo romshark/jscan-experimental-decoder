@@ -76,7 +76,7 @@ func TestImplementationsStruct3(t *testing.T) {
 		}
 		require.NoError(t, err)
 		var v bench.Struct3
-		if err := d.Decode([]byte(in), &v, opts); err.IsErr() {
+		if _, err := d.Decode([]byte(in), &v, opts); err != nil {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -192,7 +192,7 @@ func BenchmarkDecodeStruct3(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v bench.Struct3
-			if err := d.Decode(in, &v, opts); err.IsErr() {
+			if _, err := d.Decode(in, &v, opts); err != nil {
 				b.Fatal(err)
 			}
 		}

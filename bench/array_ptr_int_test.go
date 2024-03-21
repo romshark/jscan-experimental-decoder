@@ -59,7 +59,7 @@ func TestImplementationsPtrInt(t *testing.T) {
 		)
 		require.NoError(t, err)
 		var v *int
-		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
+		if _, err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err != nil {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -170,7 +170,7 @@ func BenchmarkPtrInt(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v *int
-			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
+			if _, err := d.Decode(in, &v, jscandec.DefaultOptions); err != nil {
 				b.Fatal(err)
 			}
 		}

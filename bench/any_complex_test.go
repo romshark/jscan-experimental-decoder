@@ -80,7 +80,7 @@ func TestImplementationsAnyComplex(t *testing.T) {
 		}
 		require.NoError(t, err)
 		var v any
-		if err := d.Decode([]byte(in), &v, opts); err.IsErr() {
+		if _, err := d.Decode([]byte(in), &v, opts); err != nil {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -196,7 +196,7 @@ func BenchmarkDecodeAnyComplex(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v any
-			if err := d.Decode(in, &v, opts); err.IsErr() {
+			if _, err := d.Decode(in, &v, opts); err != nil {
 				b.Fatal(err)
 			}
 		}

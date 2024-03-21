@@ -46,23 +46,6 @@ func (n Number) Int64() (int64, error) {
 
 var tpNumber = reflect.TypeOf(Number(""))
 
-type ErrorDecode struct {
-	Err      error
-	Expected ExpectType
-	Index    int
-}
-
-func (e ErrorDecode) IsErr() bool { return e.Err != nil }
-
-func (e ErrorDecode) Error() string {
-	var s strings.Builder
-	s.WriteString("at index ")
-	s.WriteString(strconv.Itoa(e.Index))
-	s.WriteString(": ")
-	s.WriteString(e.Err.Error())
-	return s.String()
-}
-
 type ExpectType int8
 
 const (
@@ -512,11 +495,9 @@ func Unmarshal[S []byte | string, T any](s S, t *T) error {
 	)
 	d := Decoder[S, T]{tokenizer: tokenizer, stackExp: stack}
 	d.init()
-	if err := d.Decode(s, t, DefaultOptions); err.IsErr() {
-		if err.Err == ErrStringTagOptionOnUnsupportedType {
-			return nil
-		}
-		return err.Err
+	if _, err := d.Decode(s, t, DefaultOptions); err != nil &&
+		err != ErrStringTagOptionOnUnsupportedType {
+		return err
 	}
 	return nil
 }
@@ -731,7 +712,9 @@ type DecodeOptions struct {
 // allocate the options to a variable and pass the variable instead:
 //
 //	d.Decode(input, &v, predefinedOptions)
-func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDecode) {
+func (d *Decoder[S, T]) Decode(
+	s S, t *T, options *DecodeOptions,
+) (errIndex int, err error) {
 	defer func() {
 		for i := range d.stackExp {
 			d.stackExp[i].Dest = nil
@@ -739,7 +722,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	}()
 
 	if t == nil {
-		return ErrorDecode{Err: ErrNilDest}
+		return 0, ErrNilDest
 	}
 
 	si := uint32(0)
@@ -767,10 +750,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 				ti++
@@ -793,28 +773,19 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					v, errParse := strconv.ParseFloat(su, 64)
 					if errParse != nil {
-						err = ErrorDecode{
-							Err:   errParse,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*any)(p) = v
 
 				case ExpectTypeUint:
 					if s[tokens[ti].Index] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					if i, e := d.parseUint(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid unsigned integer
-						err = ErrorDecode{
-							Err:   e,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, e
 						return true
 					} else {
 						*(*uint)(p) = i
@@ -823,10 +794,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeInt:
 					if i, e := d.parseInt(s[tokens[ti].Index:tokens[ti].End]); e != nil {
 						// Invalid signed integer
-						err = ErrorDecode{
-							Err:   e,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, e
 						return true
 					} else {
 						*(*int)(p) = i
@@ -834,76 +802,52 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 
 				case ExpectTypeUint8:
 					if s[tokens[ti].Index] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U8(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 8-bit unsigned integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*uint8)(p) = v
 
 				case ExpectTypeUint16:
 					if s[tokens[ti].Index] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U16(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 16-bit unsigned integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*uint16)(p) = v
 
 				case ExpectTypeUint32:
 					if s[tokens[ti].Index] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U32(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 32-bit unsigned integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*uint32)(p) = v
 
 				case ExpectTypeUint64:
 					if s[tokens[ti].Index] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U64(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 64-bit unsigned integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*uint64)(p) = v
@@ -912,10 +856,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, overflow := atoi.I8(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 8-bit signed integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*int8)(p) = v
@@ -924,10 +865,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, overflow := atoi.I16(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 16-bit signed integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*int16)(p) = v
@@ -936,10 +874,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, overflow := atoi.I32(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 32-bit signed integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*int32)(p) = v
@@ -948,10 +883,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					v, overflow := atoi.I64(s[tokens[ti].Index:tokens[ti].End])
 					if overflow {
 						// Invalid 64-bit signed integer
-						err = ErrorDecode{
-							Err:   ErrIntegerOverflow,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrIntegerOverflow
 						return true
 					}
 					*(*int64)(p) = v
@@ -962,14 +894,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// And float32(i32) is faster than calling parseFloat32
 						i32, errParse := tokens[ti].Int32(s)
 						if errParse != nil {
-							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							errIndex, err = tokens[ti].Index, errParse
 							return true
 						}
 						*(*float32)(p) = float32(i32)
 					} else {
 						v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
 						if errParse != nil {
-							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							errIndex, err = tokens[ti].Index, errParse
 							return true
 						}
 						*(*float32)(p) = v
@@ -981,14 +913,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						// And float64(i64) is faster than calling parseFloat64
 						i64, errParse := tokens[ti].Int64(s)
 						if errParse != nil {
-							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							errIndex, err = tokens[ti].Index, errParse
 							return true
 						}
 						*(*float64)(p) = float64(i64)
 					} else {
 						v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
 						if errParse != nil {
-							err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+							errIndex, err = tokens[ti].Index, errParse
 							return true
 						}
 						*(*float64)(p) = v
@@ -1004,10 +936,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					goto ON_JSON_UNMARSHALER
 
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 				ti++
@@ -1030,10 +959,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 					v, errParse := strconv.ParseFloat(su, 64)
 					if errParse != nil {
-						err = ErrorDecode{
-							Err:   errParse,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*any)(p) = v
@@ -1041,14 +967,14 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeFloat32:
 					v, errParse := d.parseFloat32(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*float32)(p) = v
 				case ExpectTypeFloat64:
 					v, errParse := d.parseFloat64(s[tokens[ti].Index:tokens[ti].End])
 					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*float64)(p) = v
@@ -1059,7 +985,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
 				default:
-					err = ErrorDecode{Err: ErrUnexpectedValue, Index: tokens[ti].Index}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 				ti++
@@ -1079,10 +1005,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						s[tokens[ti].Index+1 : tokens[ti].End-1],
 					)
 					if errUnmarshal := u.UnmarshalText(tb); errUnmarshal != nil {
-						err = ErrorDecode{
-							Err:   errUnmarshal,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, errUnmarshal
 						return true
 					}
 				case ExpectTypeAny:
@@ -1100,10 +1023,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case "false":
 						*(*bool)(p) = false
 					default:
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 				case ExpectTypeStrString:
@@ -1112,10 +1032,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						string(tv[0:2]) != `\"` ||
 						string(tv[len(tv)-2:]) != `\"` {
 						// Too short or not encloused by \"
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					val := tv[2 : len(tv)-2]
@@ -1127,10 +1044,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						indexReverseSolidus = bytes.IndexByte(val, '\\')
 					}
 					if indexReverseSolidus != -1 {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*string)(p) = string(val)
@@ -1138,10 +1052,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeNumber:
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					if _, rc := jsonnum.ReadNumber(tv); rc == jsonnum.ReturnCodeErr {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*Number)(p) = Number(tv)
@@ -1150,15 +1061,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc == jsonnum.ReturnCodeErr {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, errParse := d.parseFloat32(tv)
 					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*float32)(p) = v
@@ -1166,15 +1074,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc == jsonnum.ReturnCodeErr {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, errParse := d.parseFloat64(tv)
 					if errParse != nil {
-						err = ErrorDecode{Err: errParse, Index: tokens[ti].Index}
+						errIndex, err = tokens[ti].Index, errParse
 						return true
 					}
 					*(*float64)(p) = v
@@ -1182,18 +1087,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, errParse := d.parseInt(tv)
 					if errParse != nil {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*int)(p) = v
@@ -1201,18 +1100,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.I8(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*int8)(p) = v
@@ -1220,18 +1113,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.I16(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*int16)(p) = v
@@ -1239,18 +1126,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.I32(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*int32)(p) = v
@@ -1258,18 +1139,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.I64(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*int64)(p) = v
@@ -1277,18 +1152,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, errParse := d.parseUint(tv)
 					if errParse != nil {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*uint)(p) = v
@@ -1296,18 +1165,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U8(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*uint8)(p) = v
@@ -1315,18 +1178,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U16(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*uint16)(p) = v
@@ -1334,18 +1191,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U32(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*uint32)(p) = v
@@ -1353,18 +1204,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					tv := s[tokens[ti].Index+1 : tokens[ti].End-1]
 					_, rc := jsonnum.ReadNumber(tv)
 					if rc != jsonnum.ReturnCodeInteger || tv[0] == '-' {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					v, overflow := atoi.U64(tv)
 					if overflow {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*uint64)(p) = v
@@ -1373,10 +1218,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeJSONUnmarshaler:
 					goto ON_JSON_UNMARSHALER
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 				// This will either copy from a byte slice or create a sub-
@@ -1475,10 +1317,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					)
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					*(*any)(p) = v
@@ -1658,10 +1497,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeFalse:
 							sl[i] = false
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1698,10 +1534,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								s[tokens[i].Index+1 : tokens[i].End-1],
 							)
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1736,18 +1569,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeInteger:
 							v, errParse := d.parseInt(s[tokens[i].Index:tokens[i].End])
 							if errParse != nil {
-								err = ErrorDecode{
-									Err:   errParse,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, errParse
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1782,18 +1609,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeInteger:
 							v, overflow := atoi.I8(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1828,18 +1649,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeInteger:
 							v, overflow := atoi.I16(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1874,18 +1689,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeInteger:
 							v, overflow := atoi.I32(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1920,18 +1729,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						case jscan.TokenTypeInteger:
 							v, overflow := atoi.I64(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -1965,26 +1768,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sl[i] = 0
 						case jscan.TokenTypeInteger:
 							if s[tokens[i].Index] == '-' {
-								err = ErrorDecode{
-									Err:   ErrUnexpectedValue,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrUnexpectedValue
 								return true
 							}
 							v, errParse := d.parseUint(s[tokens[i].Index:tokens[i].End])
 							if errParse != nil {
-								err = ErrorDecode{
-									Err:   errParse,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, errParse
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2018,26 +1812,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sl[i] = 0
 						case jscan.TokenTypeInteger:
 							if s[tokens[i].Index] == '-' {
-								err = ErrorDecode{
-									Err:   ErrUnexpectedValue,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrUnexpectedValue
 								return true
 							}
 							v, overflow := atoi.U8(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2071,26 +1856,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sl[i] = 0
 						case jscan.TokenTypeInteger:
 							if s[tokens[i].Index] == '-' {
-								err = ErrorDecode{
-									Err:   ErrUnexpectedValue,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrUnexpectedValue
 								return true
 							}
 							v, overflow := atoi.U16(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2124,26 +1900,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sl[i] = 0
 						case jscan.TokenTypeInteger:
 							if s[tokens[i].Index] == '-' {
-								err = ErrorDecode{
-									Err:   ErrUnexpectedValue,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrUnexpectedValue
 								return true
 							}
 							v, overflow := atoi.U32(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2177,26 +1944,17 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 							sl[i] = 0
 						case jscan.TokenTypeInteger:
 							if s[tokens[i].Index] == '-' {
-								err = ErrorDecode{
-									Err:   ErrUnexpectedValue,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrUnexpectedValue
 								return true
 							}
 							v, overflow := atoi.U64(s[tokens[i].Index:tokens[i].End])
 							if overflow {
-								err = ErrorDecode{
-									Err:   ErrIntegerOverflow,
-									Index: tokens[i].Index,
-								}
+								errIndex, err = tokens[i].Index, ErrIntegerOverflow
 								return true
 							}
 							sl[i] = v
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2233,7 +1991,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								s[tokens[i].Index:tokens[i].End],
 							)
 							if errParse != nil {
-								err = ErrorDecode{Err: errParse, Index: tokens[i].Index}
+								errIndex, err = tokens[i].Index, errParse
 								return true
 							}
 							sl[i] = v
@@ -2243,9 +2001,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								// 1<<24 and float32(i32) is faster than parseFloat32.
 								i32, errParse := tokens[i].Int32(s)
 								if errParse != nil {
-									err = ErrorDecode{
-										Err: errParse, Index: tokens[i].Index,
-									}
+									errIndex, err = tokens[i].Index, errParse
 									return true
 								}
 								sl[i] = float32(i32)
@@ -2254,18 +2010,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 									s[tokens[i].Index:tokens[i].End],
 								)
 								if errParse != nil {
-									err = ErrorDecode{
-										Err: errParse, Index: tokens[i].Index,
-									}
+									errIndex, err = tokens[i].Index, errParse
 									return true
 								}
 								sl[i] = v
 							}
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2302,7 +2053,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								s[tokens[i].Index:tokens[i].End],
 							)
 							if errParse != nil {
-								err = ErrorDecode{Err: errParse, Index: tokens[i].Index}
+								errIndex, err = tokens[i].Index, errParse
 								return true
 							}
 							sl[i] = v
@@ -2312,9 +2063,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								// 1<<53a and float64(i64) is faster than parseFloat64.
 								v, errParse := tokens[i].Int64(s)
 								if errParse != nil {
-									err = ErrorDecode{
-										Err: errParse, Index: tokens[i].Index,
-									}
+									errIndex, err = tokens[i].Index, errParse
 									return true
 								}
 								sl[i] = float64(v)
@@ -2323,18 +2072,13 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 									s[tokens[i].Index:tokens[i].End],
 								)
 								if errParse != nil {
-									err = ErrorDecode{
-										Err: errParse, Index: tokens[i].Index,
-									}
+									errIndex, err = tokens[i].Index, errParse
 									return true
 								}
 								sl[i] = v
 							}
 						default:
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[i].Index,
-							}
+							errIndex, err = tokens[i].Index, ErrUnexpectedValue
 							return true
 						}
 					}
@@ -2349,10 +2093,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					goto ON_JSON_UNMARSHALER
 
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 
@@ -2364,10 +2105,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeAny:
 					v, tail, errDecode := decodeAny(s, tokens[ti:])
 					if errDecode != nil {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 					p := unsafe.Pointer(
@@ -2475,10 +2213,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 								m[keyUnescaped] = ""
 								continue
 							}
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokVal.Index,
-							}
+							errIndex, err = tokVal.Index, ErrUnexpectedValue
 							return true
 						}
 						key := s[tokens[ti].Index+1 : tokens[ti].End-1]
@@ -2528,10 +2263,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					goto ON_JSON_UNMARSHALER
 
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 
@@ -2580,10 +2312,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					PROCEED:
 						if frameIndex == noParentFrame {
 							if options.DisallowUnknownFields {
-								err = ErrorDecode{
-									Err:   ErrUnknownField,
-									Index: tokens[ti].Index,
-								}
+								errIndex, err = tokens[ti].Index, ErrUnknownField
 								return true
 							}
 							// Skip value, go to the next key
@@ -2607,10 +2336,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						}
 						si = frameIndex
 						if si == noParentFrame {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						break
@@ -2638,10 +2364,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 						iface := v.Interface().(encoding.TextUnmarshaler)
 						keyUnescaped := unescape.Valid[S, []byte](key)
 						if errU := iface.UnmarshalText(keyUnescaped); errU != nil {
-							err = ErrorDecode{
-								Err:   errU,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, errU
 							return true
 						}
 						pKey := v.UnsafePointer()
@@ -2658,18 +2381,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeInt:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, errParse := d.parseInt(key)
 						if errParse != nil {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2677,18 +2394,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeInt8:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.I8(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2696,18 +2407,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeInt16:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.I16(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2715,18 +2420,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeInt32:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.I32(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2734,18 +2433,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeInt64:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.I64(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2753,18 +2446,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeUint:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, errParse := d.parseUint(key)
 						if errParse != nil {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2772,18 +2459,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeUint8:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.U8(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2791,18 +2472,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeUint16:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.U16(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2810,18 +2485,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeUint32:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.U32(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2829,18 +2498,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					case ExpectTypeUint64:
 						_, rc := jsonnum.ReadNumber(key)
 						if rc != jsonnum.ReturnCodeInteger || key[0] == '-' {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						v, overflow := atoi.U64(key)
 						if overflow {
-							err = ErrorDecode{
-								Err:   ErrUnexpectedValue,
-								Index: tokens[ti].Index,
-							}
+							errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 							return true
 						}
 						pNewData = mapassign(typMap, pMap, noescape(unsafe.Pointer(&v)))
@@ -2864,10 +2527,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 					}
 
 				default:
-					err = ErrorDecode{
-						Err:   ErrUnexpectedValue,
-						Index: tokens[ti].Index,
-					}
+					errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 					return true
 				}
 				ti++
@@ -3003,10 +2663,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				case ExpectTypeMap, ExpectTypeStruct, ExpectTypeStructRecur:
 					si = siCon
 					if si == noParentFrame {
-						err = ErrorDecode{
-							Err:   ErrUnexpectedValue,
-							Index: tokens[ti].Index,
-						}
+						errIndex, err = tokens[ti].Index, ErrUnexpectedValue
 						return true
 					}
 				}
@@ -3048,10 +2705,7 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 				}
 				u := reflect.NewAt(d.stackExp[si].RType, p).Interface().(json.Unmarshaler)
 				if errUnmarshal := u.UnmarshalJSON([]byte(raw)); errUnmarshal != nil {
-					err = ErrorDecode{
-						Err:   errUnmarshal,
-						Index: tkIndex,
-					}
+					errIndex, err = tkIndex, errUnmarshal
 					return true
 				}
 			}
@@ -3061,15 +2715,12 @@ func (d *Decoder[S, T]) Decode(s S, t *T, options *DecodeOptions) (err ErrorDeco
 	})
 	if errTok.IsErr() {
 		if errTok.Code == jscan.ErrorCodeCallback {
-			return err
+			return errIndex, err
 		}
-		return ErrorDecode{
-			Err:   errTok,
-			Index: errTok.Index,
-		}
+		return errTok.Index, errTok
 	}
 	*t = *(*T)(d.stackExp[0].Dest)
-	return ErrorDecode{}
+	return -1, nil
 }
 
 type sliceHeader struct {

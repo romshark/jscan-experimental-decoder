@@ -66,7 +66,7 @@ func TestImplementationsStructVector3D(t *testing.T) {
 		)
 		require.NoError(t, err)
 		var v bench.StructVector3D
-		if err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err.IsErr() {
+		if _, err := d.Decode([]byte(in), &v, jscandec.DefaultOptions); err != nil {
 			t.Fatal(err)
 		}
 		require.Equal(t, expect(), v)
@@ -171,7 +171,7 @@ func BenchmarkDecodeStructVector3D(b *testing.B) {
 		b.ResetTimer()
 		for n := 0; n < b.N; n++ {
 			var v bench.StructVector3D
-			if err := d.Decode(in, &v, jscandec.DefaultOptions); err.IsErr() {
+			if _, err := d.Decode(in, &v, jscandec.DefaultOptions); err != nil {
 				b.Fatal(err)
 			}
 		}
